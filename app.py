@@ -78,7 +78,7 @@ if uploaded_file is not None:
 
                     # Envia para a IA
                     myfile = genai.upload_file(tmp_path)
-                    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=SYSTEM_INSTRUCTION)
+                    model = genai.GenerativeModel("gemini-1.5-flash-001", system_instruction=SYSTEM_INSTRUCTION)
                     
                     response = model.generate_content([myfile, final_prompt])
                     
@@ -92,3 +92,4 @@ if uploaded_file is not None:
                     # Limpeza
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
+
