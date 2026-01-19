@@ -29,7 +29,7 @@ THEME = {
 }
 
 # ==============================================================================
-# 2. CSS VISUAL (CORREÇÃO MOBILE)
+# 2. CSS VISUAL (MICROFONE ESTILO GEMINI)
 # ==============================================================================
 st.markdown(f"""
 <style>
@@ -55,45 +55,45 @@ st.markdown(f"""
         left: 0;
         right: 0;
         padding: 20px;
-        padding-top: 10px;
         background-color: {THEME['bg']};
         z-index: 999;
         border-top: 1px solid #333;
     }}
     
-    /* --- CORREÇÃO DO MICROFONE (GEMINI STYLE) --- */
+    /* --- O MICROFONE PERFEITO --- */
     div[data-testid="stAudioInput"] {{
         position: fixed;
-        bottom: 80px; /* Fica logo acima da barra de texto */
-        left: 0; 
-        right: 0;
-        margin: 0 auto; /* Centraliza na tela */
-        width: 90%; /* Ocupa largura boa no celular */
-        max-width: 600px; /* Não fica gigante no PC */
+        bottom: 90px;        /* Logo acima da barra de texto */
+        right: 20px;         /* Canto direito (padrão mobile) */
+        width: 50px !important;
+        height: 50px !important;
         z-index: 1000;
-        background-color: transparent; /* Fundo transparente para integrar */
     }}
     
-    /* Estiliza a caixinha interna do audio para ficar bonita */
+    /* Transforma a caixa em uma bolinha */
     div[data-testid="stAudioInput"] > div {{
-        background-color: {THEME['card']};
-        border: 1px solid #444;
-        border-radius: 20px;
-        color: white;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.2); /* Sombra pra cima */
+        border-radius: 50% !important; /* Redondo */
+        background-color: {THEME['card']} !important;
+        border: 1px solid #444 !important;
+        color: {THEME['accent']} !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        padding: 0 !important;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }}
-    
-    /* Esconde o label "Voz" para economizar espaço */
+
+    /* Esconde qualquer texto para ficar só o ícone */
     div[data-testid="stAudioInput"] label {{
         display: none;
     }}
-
-    /* Aumentar espaço no fundo para o chat não ficar escondido */
+    
+    /* Ajuste de espaçamento para o chat */
     .main .block-container {{
-        padding-bottom: 160px;
+        padding-bottom: 150px;
     }}
     
-    /* TEXTO HERO (BOAS VINDAS) */
+    /* TEXTO HERO */
     .hero-title {{
         font-size: 3rem;
         font-weight: 700;
@@ -102,7 +102,7 @@ st.markdown(f"""
         -webkit-text-fill-color: transparent;
     }}
     
-    /* UPLOAD AREA */
+    /* UPLOAD */
     .upload-box {{
         border: 2px dashed #444;
         border-radius: 10px;
@@ -163,13 +163,10 @@ def upload_handler(file_obj):
     try:
         mime = mimetypes.guess_type(file_obj.name)[0] or 'application/octet-stream'
         ext = os.path.splitext(file_obj.name)[1]
-        
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(file_obj.getvalue())
             tmp_path = tmp.name
-        
         clean_name = "".join([c for c in file_obj.name if c.isalnum() or c in "._- "])
-        
         with st.spinner(f"Processando {clean_name}..."):
             ref = genai.upload_file(path=tmp_path, mime_type=mime, display_name=clean_name)
             while ref.state.name == "PROCESSING":
@@ -197,55 +194,38 @@ def run_ai(user_text, audio_data=None):
     try:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         model = genai.GenerativeModel(st.session_state.settings["model"])
-        
         history = []
-        
-        # 1. Arquivos
         for f in session["files"]:
             history.append({"role": "user", "parts": [f, "Contexto."]})
             history.append({"role": "model", "parts": ["Ok."]})
-            
-        # 2. Áudio
         if audio_data:
             ref = upload_handler(audio_data)
             if ref:
                 history.append({"role": "user", "parts": [ref, "Transcreva e analise."]})
                 history.append({"role": "model", "parts": ["Ok."]})
-        
-        # 3. Histórico Chat
         for m in session["history"]:
             if "🎤" not in str(m["content"]):
                 role = "model" if m["role"] == "assistant" else "user"
                 history.append({"role": role, "parts": [str(m["content"])]})
-                
         prompt = user_text if user_text else "Analise o conteúdo enviado."
-        
         chat = model.start_chat(history=history)
         response = chat.send_message(prompt)
-        
         session["history"].append({"role": "assistant", "content": response.text})
-        
-        # Título automático
         if len(session["history"]) <= 2:
             try: session["title"] = model.generate_content(f"Título 3 palavras: {prompt}").text.strip()
             except: pass
-            
     except Exception as e:
         st.error(f"Erro: {e}")
 
 # ==============================================================================
-# 5. BARRA LATERAL (SIDEBAR)
+# 5. BARRA LATERAL
 # ==============================================================================
 def render_sidebar():
     with st.sidebar:
         st.header("Carmélio OS")
-        
         if st.button("➕ Nova Conversa", use_container_width=True, type="primary"):
             create_new_session()
-        
         st.markdown("---")
-        
-        # UPLOAD NA BARRA LATERAL
         with st.expander("📂 Arquivos do Processo", expanded=True):
             session = get_active_session()
             if session["files"]:
@@ -253,8 +233,6 @@ def render_sidebar():
                 if st.button("Limpar Arquivos", key="clean_files"):
                     session["files"] = []
                     st.rerun()
-            
-            # Botão de Upload
             uploaded = st.file_uploader("Adicionar PDF/Áudio", label_visibility="collapsed", key=f"sidebar_up_{st.session_state.active_session_id}")
             if uploaded:
                 ref = upload_handler(uploaded)
@@ -263,7 +241,6 @@ def render_sidebar():
                     st.toast("Arquivo salvo na memória!")
                     time.sleep(1)
                     st.rerun()
-
         st.markdown("---")
         st.markdown("**Histórico**")
         for sid in st.session_state.sessions:
@@ -282,8 +259,6 @@ def render_sidebar():
 # ==============================================================================
 def render_main():
     session = get_active_session()
-    
-    # Se não tem mensagens, mostra a tela de boas-vindas
     if not session["history"]:
         st.markdown(f"""
         <div style="text-align: center; margin-top: 15vh;">
@@ -291,8 +266,6 @@ def render_main():
             <p style="color: #888;">Sistema pronto. Carregue um arquivo ou use a voz.</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        # Atalho de Upload no meio da tela (pra não ter erro!)
         c1, c2, c3 = st.columns([1,2,1])
         with c2:
             st.markdown("<div class='upload-box'>📂 Atalho: Solte seu arquivo aqui</div>", unsafe_allow_html=True)
@@ -304,15 +277,11 @@ def render_main():
                     st.success("Arquivo carregado! Pode perguntar abaixo.")
                     time.sleep(1)
                     st.rerun()
-        
-        # Sugestões
         cols = st.columns(3)
         if cols[0].button("📝 Criar Petição", use_container_width=True): handle_input("Crie uma petição inicial.")
         if cols[1].button("🔍 Analisar Riscos", use_container_width=True): handle_input("Analise riscos contratuais.")
         if cols[2].button("📅 Prazos", use_container_width=True): handle_input("Quais os prazos aqui?")
-        
     else:
-        # Chat
         chat_container = st.container()
         with chat_container:
             for msg in session["history"]:
@@ -323,16 +292,11 @@ def render_main():
                         st.download_button("⬇️ Baixar DOCX", docx, file_name="Carmelio.docx", key=f"d_{hash(msg['content'])}")
 
 # ==============================================================================
-# 7. HANDLER DE INPUT (CORREÇÃO MOBILE)
+# 7. HANDLER DE INPUT (FIXO E DISCRETO)
 # ==============================================================================
 def handle_input(txt_override=None):
-    # O PULO DO GATO: Renderizar o áudio ANTES do chat input
-    # Isso garante que no layout eles fiquem próximos, mas controlados pelo CSS
-    
-    # Widget de Áudio (Agora centralizado via CSS)
+    # A Mágica: O microfone fica flutuando no CSS (bottom right), e o texto fixo no fundo
     audio = st.audio_input("Voz", key="main_mic")
-    
-    # Widget de Texto (Fixo embaixo)
     prompt = st.chat_input("Mensagem para Carmélio OS...")
     
     final_txt = txt_override if txt_override else prompt
@@ -341,14 +305,10 @@ def handle_input(txt_override=None):
         session = get_active_session()
         disp = final_txt if final_txt else "🎤 [Áudio Enviado]"
         session["history"].append({"role": "user", "content": disp})
-        
         with st.spinner("Processando..."):
             run_ai(final_txt, audio)
         st.rerun()
 
-# ==============================================================================
-# 8. EXECUÇÃO
-# ==============================================================================
 if __name__ == "__main__":
     render_sidebar()
     render_main()
