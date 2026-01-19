@@ -31,7 +31,11 @@ st.markdown(f"""
 <style>
     /* BASE */
     .stApp {{background-color: {THEME['bg']}; color: {THEME['text']};}}
-    .stDeployButton, footer, header, div[data-testid="stToolbar"] {{display: none !important;}}
+    
+    /* CORREÇÃO: Esconder apenas o botão Deploy e Footer, mas MANTER o Header (onde fica o menu) */
+    .stDeployButton {{display: none !important;}}
+    footer {{visibility: hidden;}}
+    /* div[data-testid="stToolbar"] {{display: none !important;}}  <-- REMOVIDO PARA O MENU APARECER */
     
     /* SIDEBAR */
     section[data-testid="stSidebar"] {{background-color: {THEME['sidebar']}; border-right: 1px solid #333;}}
@@ -59,16 +63,15 @@ st.markdown(f"""
     /* ESPAÇAMENTO CHAT */
     .main .block-container {{padding-bottom: 150px;}}
     
-    /* BOTÕES DE UTILIDADE (CARDS) */
-    .utility-card {{
-        background-color: {THEME['card']};
-        border: 1px solid #444;
-        border-radius: 12px;
-        padding: 20px;
+    /* UPLOAD BOX CENTRAL */
+    .central-upload {{
+        border: 2px dashed #555;
+        border-radius: 15px;
+        padding: 30px;
         text-align: center;
-        transition: 0.3s;
+        background-color: {THEME['card']};
+        margin-bottom: 20px;
     }}
-    .utility-card:hover {{border-color: {THEME['accent']};}}
     
     /* TÍTULO */
     .hero-title {{
@@ -156,23 +159,22 @@ def run_ai(prompt, audio=None):
                 role = "model" if m["role"] == "assistant" else "user"
                 hist.append({"role": role, "parts": [str(m["content"])]})
         
-        # System Prompt Oculto (Focado em Utilitário)
-        sys_prompt = "Você é uma ferramenta de produtividade. Se receber áudio, transcreva. Se receber imagem, faça OCR (extraia texto). Se receber documento jurídico, analise. Seja direto."
+        # System Prompt
+        sys_prompt = "Você é uma ferramenta de produtividade. Se receber áudio, transcreva integralmente. Se receber imagem, faça OCR. Se receber documento jurídico, analise."
         
         chat = model.start_chat(history=[{"role":"user", "parts":[sys_prompt]}, {"role":"model", "parts":["Ok."]}] + hist)
         response = chat.send_message(prompt if prompt else "Prossiga.")
         
         sess["history"].append({"role": "assistant", "content": response.text})
         
-        # Nomear chat
         if len(sess["history"]) <= 2:
-            try: sess["title"] = model.generate_content(f"Título curto 2 palavras para: {prompt}").text.strip()
+            try: sess["title"] = model.generate_content(f"Título curto 2 palavras: {prompt}").text.strip()
             except: pass
             
     except Exception as e: st.error(f"Erro: {e}")
 
 # ==============================================================================
-# 4. INTERFACE
+# 4. INTERFACE LATERAL
 # ==============================================================================
 def sidebar():
     with st.sidebar:
@@ -180,16 +182,14 @@ def sidebar():
         if st.button("➕ Nova Tarefa", type="primary", use_container_width=True): new_session()
         st.markdown("---")
         
-        with st.expander("📂 Arquivos / Mídia", expanded=True):
-            sess = get_session()
-            if sess["files"]:
-                st.info(f"{len(sess['files'])} arquivo(s)")
-                if st.button("Limpar"): sess["files"] = []; st.rerun()
-            up = st.file_uploader("Adicionar", label_visibility="collapsed", key=f"up_{st.session_state.active_session_id}")
-            if up:
-                ref = upload_handler(up)
-                if ref: sess["files"].append(ref); st.rerun()
-        
+        # ÁREA DE ARQUIVOS ATIVOS
+        sess = get_session()
+        if sess["files"]:
+            st.success(f"✅ {len(sess['files'])} arquivo(s) na memória")
+            if st.button("Limpar Memória"): sess["files"] = []; st.rerun()
+        else:
+            st.info("Nenhum arquivo anexado.")
+            
         st.markdown("---")
         st.caption("Histórico")
         for sid in st.session_state.sessions:
@@ -199,53 +199,63 @@ def sidebar():
             if c1.button(l, key=sid): st.session_state.active_session_id = sid; st.rerun()
             if c2.button("x", key=f"d{sid}"): delete_session(sid)
 
+# ==============================================================================
+# 5. INTERFACE PRINCIPAL
+# ==============================================================================
 def main():
     sess = get_session()
     
     # TELA DE INÍCIO (ZERO MENSAGENS)
     if not sess["history"]:
         st.markdown(f"""
-        <div style="text-align: center; margin-top: 10vh; margin-bottom: 40px;">
-            <div class="hero-title">O que vamos converter hoje?</div>
-            <p style="color: #888;">Áudio em Texto, Imagem em Word ou Análise Jurídica.</p>
+        <div style="text-align: center; margin-top: 5vh; margin-bottom: 20px;">
+            <div class="hero-title">Conversor Inteligente</div>
+            <p style="color: #888;">Arraste arquivos abaixo ou use os botões de ação.</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # BOTÕES DE UTILIDADE (ATALHOS MÁGICOS)
+        # --- UPLOAD CENTRAL (SOLUÇÃO DO PROBLEMA) ---
+        # Agora você não precisa procurar a barra lateral. Está na sua cara.
+        with st.container():
+            st.markdown("<div class='central-upload'>⬇️ <b>Solte Áudios (WhatsApp), Imagens ou PDFs aqui</b></div>", unsafe_allow_html=True)
+            uploaded = st.file_uploader("Upload Central", label_visibility="collapsed", key="main_up")
+            if uploaded:
+                ref = upload_handler(uploaded)
+                if ref:
+                    sess["files"].append(ref)
+                    st.toast("Arquivo processado! Escolha uma ação abaixo.", icon="✅")
+                    time.sleep(1)
+                    st.rerun()
+
+        # Se já tiver arquivo, mostra confirmação
+        if sess["files"]:
+            st.success("✅ Arquivo pronto para conversão! Clique em um botão abaixo:")
+
+        # BOTÕES DE AÇÃO
         c1, c2, c3 = st.columns(3)
         
         with c1:
-            st.info("🎙️ **Áudio p/ Texto**")
-            st.caption("WhatsApp, Gravações")
-            if st.button("Transcrever Áudio", use_container_width=True):
+            if st.button("🎙️ Transcrever Áudio", use_container_width=True, type="primary" if sess["files"] else "secondary"):
+                if not sess["files"]: st.error("Anexe um áudio acima primeiro!"); return
                 sess["history"].append({"role": "user", "content": "Transcrever áudio anexado."})
-                # Aqui o usuário deve ter anexado o áudio antes ou na hora
-                if not sess["files"]: st.warning("Anexe o áudio na barra lateral primeiro!"); return
-                run_ai("Transcreva o áudio em anexo integralmente (verbatim). Indique falantes se houver.")
+                run_ai("Transcreva o áudio em anexo integralmente.")
                 st.rerun()
                 
         with c2:
-            st.info("📸 **Imagem p/ Texto**")
-            st.caption("Livros, Docs Antigos")
-            if st.button("Extrair Texto (OCR)", use_container_width=True):
+            if st.button("📸 Extrair Texto (OCR)", use_container_width=True, type="primary" if sess["files"] else "secondary"):
+                if not sess["files"]: st.error("Anexe uma imagem acima primeiro!"); return
                 sess["history"].append({"role": "user", "content": "Extrair texto da imagem."})
-                if not sess["files"]: st.warning("Anexe a imagem/PDF na barra lateral primeiro!"); return
-                run_ai("Extraia todo o texto legível desta imagem/documento. Mantenha a formatação original o máximo possível.")
+                run_ai("Extraia todo o texto legível desta imagem/documento.")
                 st.rerun()
                 
         with c3:
-            st.info("📜 **Certidão/Manuscrito**")
-            st.caption("Inteiro Teor, Notas")
-            if st.button("Decifrar Documento", use_container_width=True):
-                sess["history"].append({"role": "user", "content": "Decifrar certidão/manuscrito."})
-                if not sess["files"]: st.warning("Anexe o documento na barra lateral!"); return
-                run_ai("Este é um documento difícil de ler (certidão ou manuscrito). Transcreva o conteúdo com precisão jurídica.")
+            if st.button("📜 Decifrar Manuscrito", use_container_width=True, type="primary" if sess["files"] else "secondary"):
+                if not sess["files"]: st.error("Anexe o documento acima primeiro!"); return
+                sess["history"].append({"role": "user", "content": "Decifrar documento."})
+                run_ai("Transcreva este documento difícil de ler com precisão.")
                 st.rerun()
-                
-        st.divider()
-        st.caption("Ou use o chat abaixo para conversas livres...")
 
-    # CHAT
+    # CHAT (RESULTADOS)
     else:
         with st.container():
             for msg in sess["history"]:
@@ -253,7 +263,7 @@ def main():
                     st.markdown(msg["content"])
                     if msg["role"] == "assistant":
                         b = generate_docx(msg["content"])
-                        st.download_button("⬇️ Baixar DOCX", b, file_name="Transcricao.docx", key=f"d{hash(msg['content'])}")
+                        st.download_button("⬇️ Baixar DOCX", b, file_name="Carmelio_Result.docx", key=f"d{hash(msg['content'])}")
             st.markdown("<div style='height: 150px;'></div>", unsafe_allow_html=True)
 
 def inputs():
