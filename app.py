@@ -3,384 +3,241 @@ import google.generativeai as genai
 import tempfile
 import os
 import time
-import mimetypes
 from datetime import datetime
 from docx import Document
 from io import BytesIO
 
-# --- 1. CONFIGURAÇÃO DE ALTO NÍVEL (UX/UI) ---
+# --- 1. CONFIGURAÇÃO E CSS (A Mágica Visual) ---
 st.set_page_config(
-    page_title="Carmélio AI - Legal Suite",
-    page_icon="⚖️",
+    page_title="Carmélio AI",
+    page_icon="✨",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # Começa fechado pra dar foco total
 )
 
-# CSS AVANÇADO PARA IMITAR INTERFACE DE CHAT MODERNO
 st.markdown("""
 <style>
-    /* Esconde elementos padrões do Streamlit que poluem a tela */
-    .stDeployButton {display:none;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* 1. Limpeza Geral */
+    .stDeployButton, footer, header {display:none !important;}
+    div[data-testid="stToolbar"] {display: none !important;}
     
-    /* Estilo da Barra Lateral */
-    section[data-testid="stSidebar"] {
+    /* 2. Centralizar a Tela de Boas-Vindas */
+    .welcome-container {
+        text-align: center;
+        margin-top: 10vh;
+        animation: fadeIn 1.5s ease-in-out;
+    }
+    .welcome-title {
+        font-size: 3rem;
+        font-weight: 700;
+        background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .welcome-subtitle {
+        font-size: 1.2rem;
+        color: #666;
+        margin-bottom: 30px;
+    }
+    
+    /* 3. Cards de Sugestão (Estilo Gemini) */
+    .suggestion-grid {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .suggestion-card {
         background-color: #f8f9fa;
-        border-right: 1px solid #dee2e6;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 15px 20px;
+        width: 200px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: left;
+        font-size: 0.9rem;
+        color: #444;
+    }
+    .suggestion-card:hover {
+        background-color: #e8f0fe;
+        border-color: #4285F4;
+        transform: translateY(-2px);
+    }
+
+    /* 4. POSICIONAMENTO DO INPUT (O Segredo) */
+    /* Fixa o Microfone flutuando acima da barra de texto */
+    div[data-testid="stAudioInput"] {
+        position: fixed;
+        bottom: 80px; /* Logo acima do chat input */
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60% !important; /* Largura centralizada */
+        z-index: 1000;
+        background: transparent;
     }
     
-    /* Estilo das Mensagens (Balões) */
-    .stChatMessage {
-        background-color: transparent;
-        border: none;
-    }
-    .stChatMessage[data-testid="stChatMessageAvatarUser"] {
-        background-color: #f0f2f6;
-    }
-    
-    /* Área de Input Fixa no Rodapé (Tentativa de fixação visual) */
+    /* Estiliza o Chat Input para ficar fixo no fundo */
     .stChatInput {
         position: fixed;
         bottom: 0;
-        z-index: 1000;
+        left: 0;
+        width: 100%;
+        padding-bottom: 20px;
+        padding-top: 10px;
+        background: white; /* Fundo branco pra esconder o scroll */
+        z-index: 999;
     }
     
-    /* Botões de Ação Rápida (Sugestões) */
-    .action-btn {
-        border: 1px solid #e0e0e0;
-        border-radius: 20px;
-        padding: 5px 15px;
-        margin: 5px;
-        font-size: 0.8rem;
-        background-color: white;
-        color: #333;
-        transition: 0.3s;
+    /* 5. Ajuste das Mensagens */
+    .stChatMessage {
+        max-width: 800px;
+        margin: 0 auto; /* Centraliza o chat na tela */
     }
-    .action-btn:hover {
-        background-color: #eef;
-        border-color: #ccd;
-    }
-
-    /* Ajuste do Áudio Input para ficar discreto */
-    .stAudioInput {
-        margin-top: -20px;
+    
+    @keyframes fadeIn {
+        0% { opacity: 0; transform: translateY(20px); }
+        100% { opacity: 1; transform: translateY(0); }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. GERENCIAMENTO DE SESSÃO E ESTADO ---
-# Inicialização robusta de todas as variáveis
-if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "chats" not in st.session_state:
-    # Cria o primeiro chat padrão
-    st.session_state.chats = {"chat_init": {"title": "Nova Conversa", "history": [], "file": None}}
-if "current_chat_id" not in st.session_state: st.session_state.current_chat_id = "chat_init"
-if "tom" not in st.session_state: st.session_state.tom = "Formal (Jurídico)"
-if "processing" not in st.session_state: st.session_state.processing = False
+# --- 2. ESTADO E FUNÇÕES ---
+if "history" not in st.session_state: st.session_state.history = []
+if "file" not in st.session_state: st.session_state.file = None
 
-# --- 3. MÓDULO DE SEGURANÇA E ARQUIVOS ---
-def gerar_docx_seguro(texto_md):
-    """Converte Markdown para DOCX de forma segura"""
+def gerar_word(texto):
     try:
         doc = Document()
-        doc.add_heading('Relatório Carmélio AI', 0)
-        doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}")
-        doc.add_paragraph('---')
-        
-        # Limpeza básica de Markdown para texto plano (melhoria futura: parser real)
-        texto_limpo = texto_md.replace("**", "").replace("##", "").replace("###", "")
-        
-        for paragrafo in texto_limpo.split('\n'):
-            if paragrafo.strip():
-                doc.add_paragraph(paragrafo)
-                
+        doc.add_heading('Resposta Carmélio AI', 0)
+        for p in texto.split('\n'):
+            if p.strip(): doc.add_paragraph(p)
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer
-    except Exception as e:
-        st.error(f"Erro ao gerar DOCX: {e}")
-        return None
+    except: return None
 
-def upload_handler(uploaded_file):
-    """Gerencia upload com retries, validação de MIME e limpeza"""
-    if not uploaded_file: return None
-    
+def upload_handler(up):
     try:
-        # 1. Validação de Tipo
-        mime_type = mimetypes.guess_type(uploaded_file.name)[0]
-        if not mime_type: mime_type = 'application/octet-stream'
-        
-        # 2. Sanitização do Nome
-        nome_limpo = "".join([c for c in uploaded_file.name if c.isalnum() or c in "._- "])
-        
-        # 3. Salvar Temporário
-        suffix = os.path.splitext(uploaded_file.name)[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(uploaded_file.getvalue())
-            tmp_path = tmp.name
-            
-        # 4. Envio para Google com Timeout
-        try:
-            file_ref = genai.upload_file(path=tmp_path, mime_type=mime_type, display_name=nome_limpo)
-            
-            # Loop de espera (Polling)
-            timeout = 60
-            start = time.time()
-            while file_ref.state.name == "PROCESSING":
-                if time.time() - start > timeout:
-                    raise TimeoutError("Timeout do Google")
-                time.sleep(1)
-                file_ref = genai.get_file(file_ref.name)
-                
-            if file_ref.state.name == "FAILED":
-                raise ValueError("Google rejeitou o arquivo")
-                
-            return file_ref
-            
-        finally:
-            # Limpeza do disco sempre acontece, mesmo com erro
-            if os.path.exists(tmp_path): os.remove(tmp_path)
-            
-    except Exception as e:
-        st.error(f"Erro crítico no upload: {e}")
-        return None
+        ext = os.path.splitext(up.name)[1]
+        mime = mimetypes.guess_type(up.name)[0] or 'application/octet-stream'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(up.getvalue()); tmp_path = tmp.name
+        ref = genai.upload_file(path=tmp_path, mime_type=mime, display_name="UserFile")
+        while ref.state.name == "PROCESSING": time.sleep(1); ref = genai.get_file(ref.name)
+        return ref
+    except: return None
 
-# --- 4. MÓDULO DE AUTENTICAÇÃO ---
-def tela_login():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br><h1 style='text-align: center;'>⚖️ Carmélio AI</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: grey;'>Sistema de Inteligência Jurídica v10.0</p>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        usuario = st.text_input("Usuário", placeholder="Seu usuário de acesso")
-        senha = st.text_input("Senha", type="password", placeholder="Sua senha segura")
-        
-        if st.button("Entrar no Sistema", type="primary", use_container_width=True):
-            creds = st.secrets.get("passwords", {})
-            if usuario in creds and str(creds[usuario]) == str(senha):
-                st.session_state.logged_in = True
-                st.session_state.username = usuario
-                st.rerun()
-            else:
-                st.error("🔒 Acesso Negado. Credenciais inválidas.")
-
-# --- 5. NÚCLEO DE INTELIGÊNCIA (LLM) ---
-def motor_ia(prompt_usuario, audio_input, chat_data):
-    """O Cérebro da Operação"""
+# --- 3. BARRA LATERAL (Discreta) ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Google_Chrome_icon_%28February_2022%29.svg/800px-Google_Chrome_icon_%28February_2022%29.svg.png", width=50)
+    st.markdown("### ⚙️ Configurações")
     
-    # Previne execução dupla
-    if st.session_state.processing: return
-    st.session_state.processing = True
-    
-    try:
-        # Configura API
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel("gemini-1.5-flash") # Modelo mais estável
-        
-        historico_api = []
-        
-        # 1. Injeta Personalidade (System Prompt)
-        personas = {
-            "Formal (Jurídico)": "Você é um Advogado Sênior. Use linguagem técnica, cite leis (CF/88, CPC, CC) e seja formal.",
-            "Didático (Cliente)": "Você é um consultor explicando para leigos. Use metáforas, evite 'juridiquês' e seja empático.",
-            "Executivo (Resumo)": "Você é um analista focado em dados. Responda APENAS com bullet points, datas e valores."
-        }
-        sys_msg = f"Persona: {personas.get(st.session_state.tom, '')}. Responda sempre em Markdown."
-        historico_api.append({"role": "user", "parts": [sys_msg]})
-        historico_api.append({"role": "model", "parts": ["Compreendido. Seguirei a persona."]})
-        
-        # 2. Injeta Arquivo (Contexto)
-        if chat_data["file"]:
-            historico_api.append({"role": "user", "parts": [chat_data["file"], "Este é o documento de referência para nossa conversa."]})
-            historico_api.append({"role": "model", "parts": ["Documento analisado e carregado na memória."]})
-            
-        # 3. Processa Áudio Novo (Se houver)
-        texto_extra = ""
-        if audio_input:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as t:
-                t.write(audio_input.getvalue()); tp = t.name
-            ref_audio = genai.upload_file(path=tp, mime_type="audio/wav")
-            
-            # Espera processar o áudio
-            while ref_audio.state.name == "PROCESSING": time.sleep(0.5); ref_audio = genai.get_file(ref_audio.name)
-            
-            historico_api.append({"role": "user", "parts": [ref_audio, "Transcreva e considere este áudio na sua resposta."]})
-            historico_api.append({"role": "model", "parts": ["Áudio ouvido."]})
-            os.remove(tp)
-            texto_extra = " (Resposta baseada em Áudio)"
+    # Upload aqui para não sujar a tela principal
+    with st.expander("📂 Anexar Arquivo", expanded=True):
+        up = st.file_uploader("PDF, Áudio, Imagem", label_visibility="collapsed")
+        if up:
+            with st.spinner("Enviando..."):
+                ref = upload_handler(up)
+                if ref:
+                    st.session_state.file = ref
+                    st.success("Arquivo Anexado!")
 
-        # 4. Recupera Histórico da Conversa
-        for msg in chat_data["history"]:
-            role = "model" if msg["role"] == "assistant" else "user"
-            # Filtra apenas conteúdo de texto para evitar erro de tipo
-            historico_api.append({"role": role, "parts": [str(msg["content"])]})
-            
-        # 5. Define Prompt Final
-        final_prompt = prompt_usuario if prompt_usuario else "Prossiga com a análise do contexto enviado (arquivo ou áudio)."
-        
-        # 6. Chamada à API
-        chat_session = model.start_chat(history=historico_api)
-        resposta = chat_session.send_message(final_prompt)
-        
-        # 7. Salva Resultado
-        chat_data["history"].append({"role": "assistant", "content": resposta.text + texto_extra})
-        
-        # 8. Renomeia Chat se for novo
-        if chat_data["title"] == "Nova Conversa":
-            try:
-                titulo = model.generate_content(f"Crie um título de 3 palavras para: {final_prompt}").text.strip()
-                chat_data["title"] = titulo
-            except: pass
-
-    except Exception as e:
-        st.error(f"Erro na IA: {e}")
-        chat_data["history"].append({"role": "assistant", "content": f"❌ Ocorreu um erro técnico: {str(e)}"})
-    
-    finally:
-        st.session_state.processing = False
+    if st.button("🗑️ Limpar Conversa"):
+        st.session_state.history = []
+        st.session_state.file = None
         st.rerun()
 
-# --- 6. INTERFACE PRINCIPAL (BARRA LATERAL E CHAT) ---
-def sidebar_sistema():
-    with st.sidebar:
-        st.markdown(f"### 👤 {st.session_state.username}")
-        st.markdown("---")
-        
-        # Configuração de Tom
-        st.markdown("**🧠 Personalidade da IA**")
-        st.session_state.tom = st.selectbox(
-            "Estilo de Resposta:",
-            ["Formal (Jurídico)", "Didático (Cliente)", "Executivo (Resumo)"],
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("---")
-        st.markdown("**🗂️ Gestão de Conversas**")
-        
-        if st.button("➕ Nova Conversa", type="primary", use_container_width=True):
-            new_id = f"chat_{int(time.time())}"
-            st.session_state.chats[new_id] = {"title": "Nova Conversa", "history": [], "file": None}
-            st.session_state.current_chat_id = new_id
+# --- 4. TELA PRINCIPAL (LÓGICA GEMINI) ---
+
+# A) Se não tem mensagens, mostra a tela de Boas-Vindas (Gemini Style)
+if not st.session_state.history:
+    st.markdown(f"""
+    <div class="welcome-container">
+        <div class="welcome-title">Olá, Arthur</div>
+        <div class="welcome-subtitle">Como posso ajudar você hoje com seus processos e estudos?</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Grid de Sugestões (Botões invisíveis que acionam prompts)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("📝 Criar Petição Inicial\n(Cobrança Indevida)", use_container_width=True):
+            prompt_inicial = "Crie uma petição inicial de cobrança indevida."
+            st.session_state.history.append({"role": "user", "content": prompt_inicial})
             st.rerun()
-            
-        # Lista de Chats (Scrollable)
-        ids_chats = list(st.session_state.chats.keys())[::-1]
-        for cid in ids_chats:
-            cdata = st.session_state.chats[cid]
-            # Formatação visual do botão
-            label = cdata['title']
-            if len(label) > 22: label = label[:20] + "..."
-            if cid == st.session_state.current_chat_id: label = f"📂 {label}"
-            
-            if st.button(label, key=cid, use_container_width=True):
-                st.session_state.current_chat_id = cid
-                st.rerun()
-                
-        st.markdown("---")
-        if st.button("🚪 Sair do Sistema"):
-            st.session_state.logged_in = False
+    with col2:
+        if st.button("📅 Resumir Prazos\n(Analisar Edital)", use_container_width=True):
+            prompt_inicial = "Quais são os prazos deste documento?"
+            st.session_state.history.append({"role": "user", "content": prompt_inicial})
+            st.rerun()
+    with col3:
+        if st.button("⚖️ Analisar Riscos\n(Contrato de Locação)", use_container_width=True):
+            prompt_inicial = "Analise os riscos jurídicos."
+            st.session_state.history.append({"role": "user", "content": prompt_inicial})
             st.rerun()
 
-def chat_interface():
-    # Recupera dados do chat ativo
-    chat_id = st.session_state.current_chat_id
-    chat_data = st.session_state.chats[chat_id]
+# B) Se tem mensagens, mostra o chat (com padding no fundo pra não cobrir)
+else:
+    for msg in st.session_state.history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and len(msg["content"]) > 100:
+                docx = gerar_word(msg["content"])
+                if docx: st.download_button("⬇️ Word", docx, file_name="Analise.docx", key=f"d_{hash(msg['content'])}")
     
-    st.header(chat_data['title'])
-    
-    # --- ÁREA 1: CONTEXTO (ARQUIVO) ---
-    with st.expander("📎 Contexto / Arquivos Anexados", expanded=not chat_data["file"]):
-        if not chat_data["file"]:
-            uploaded = st.file_uploader(
-                "Arraste PDF, Áudio ou Imagem aqui", 
-                type=["pdf", "jpg", "png", "mp3", "wav", "m4a"],
-                key=f"upl_{chat_id}"
-            )
-            if uploaded:
-                with st.spinner("Enviando para o servidor seguro..."):
-                    ref = upload_handler(uploaded)
-                    if ref:
-                        chat_data["file"] = ref
-                        chat_data["history"].append({"role": "assistant", "content": f"✅ Arquivo **{uploaded.name}** indexado com sucesso. O que deseja saber?"})
-                        st.rerun()
-        else:
-            st.success(f"Arquivo ativo: **{chat_data['file'].display_name}**")
-            if st.button("🗑️ Remover Arquivo", key=f"del_{chat_id}"):
-                chat_data["file"] = None
-                st.rerun()
+    # Espaço vazio no fim para o scroll não ficar preso embaixo do input
+    st.markdown("<div style='height: 150px;'></div>", unsafe_allow_html=True)
 
-    # --- ÁREA 2: FEED DE MENSAGENS ---
-    # Container para mensagens (deixa espaço para o input fixo embaixo)
-    chat_container = st.container()
-    
-    with chat_container:
-        # Mostra sugestões se estiver vazio
-        if not chat_data["history"] and chat_data["file"]:
-            st.info("💡 Sugestões de início:")
-            c1, c2, c3 = st.columns(3)
-            if c1.button("📝 Resumir Documento"):
-                chat_data["history"].append({"role": "user", "content": "Faça um resumo executivo."})
-                motor_ia("Faça um resumo executivo.", None, chat_data)
-            if c2.button("📅 Extrair Prazos"):
-                chat_data["history"].append({"role": "user", "content": "Quais são as datas importantes?"})
-                motor_ia("Liste todas as datas e prazos.", None, chat_data)
-            if c3.button("⚖️ Analisar Riscos"):
-                chat_data["history"].append({"role": "user", "content": "Quais os riscos jurídicos?"})
-                motor_ia("Aponte cláusulas de risco.", None, chat_data)
+# --- 5. ÁREA DE INPUT (FIXA NO RODAPÉ) ---
 
-        # Renderiza Mensagens
-        for msg in chat_data["history"]:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-                
-                # Botão de Download inteligente (só aparece em respostas longas da IA)
-                if msg["role"] == "assistant" and len(msg["content"]) > 100:
-                    docx_file = gerar_docx_seguro(msg["content"])
-                    if docx_file:
-                        st.download_button(
-                            label="⬇️ Baixar DOCX",
-                            data=docx_file,
-                            file_name="Carmelio_Analise.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key=f"down_{hash(msg['content'])}"
-                        )
+# O Microfone fica flutuando (veja o CSS lá em cima)
+audio_val = st.audio_input("Falar", label_visibility="collapsed")
 
-        # Elemento vazio para dar margem ao fundo (scroll)
-        st.markdown("<div style='height: 150px;'></div>", unsafe_allow_html=True)
+# O Chat Input fica fixo no fundo
+prompt_val = st.chat_input("Digite uma mensagem ou comando...")
 
-    # --- ÁREA 3: INPUT FIXO (RODAPÉ) ---
-    # Esta área fica "presa" no fundo da tela visualmente
+# LÓGICA DE ENVIO
+if prompt_val or audio_val:
+    user_msg = prompt_val if prompt_val else "🎤 [Áudio Enviado]"
+    st.session_state.history.append({"role": "user", "content": user_msg})
     
-    # Separador visual
-    st.markdown("---") 
-    
-    col_mic, col_text = st.columns([1, 6])
-    
-    with col_mic:
-        # Novo componente de áudio nativo
-        audio_blob = st.audio_input("Falar", key=f"mic_{chat_id}")
-    
-    with col_text:
-        prompt_text = st.chat_input("Digite sua mensagem para o Carmélio AI...", key=f"txt_{chat_id}")
+    # Processamento IA
+    with st.spinner("✨ Pensando..."):
+        try:
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            
+            hist_api = []
+            # Injeta Arquivo se existir
+            if st.session_state.file:
+                hist_api.append({"role": "user", "parts": [st.session_state.file, "Contexto."]})
+                hist_api.append({"role": "model", "parts": ["Ok."]})
+            
+            # Injeta Áudio Novo se existir
+            if audio_val:
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as t:
+                    t.write(audio_val.getvalue()); tpath = t.name
+                ref_mic = genai.upload_file(path=tpath, mime_type="audio/wav")
+                while ref_mic.state.name == "PROCESSING": time.sleep(0.5); ref_mic = genai.get_file(ref_mic.name)
+                hist_api.append({"role": "user", "parts": [ref_mic, "Transcreva e responda."]})
+                hist_api.append({"role": "model", "parts": ["Ok."]})
 
-    # GATILHO DE ENVIO UNIFICADO
-    if prompt_text or audio_blob:
-        # Se usuário falou ou digitou
-        msg_user = prompt_text if prompt_text else "🎤 [Áudio Enviado]"
-        
-        # 1. Adiciona msg do user ao histórico
-        chat_data["history"].append({"role": "user", "content": msg_user})
-        
-        # 2. Roda a IA (passando texto e áudio se houver)
-        motor_ia(prompt_text, audio_blob, chat_data)
+            # Histórico
+            for m in st.session_state.history:
+                if m["content"] != "🎤 [Áudio Enviado]": # Evita duplicar placeholder
+                    role = "model" if m["role"] == "assistant" else "user"
+                    hist_api.append({"role": role, "parts": [m["content"]]})
 
-# --- 7. EXECUTOR PRINCIPAL ---
-if __name__ == "__main__":
-    if not st.session_state.logged_in:
-        tela_login()
-    else:
-        sidebar_sistema()
-        chat_interface()
+            prompt_final = prompt_val if prompt_val else "Analise o áudio enviado."
+            
+            chat = model.start_chat(history=hist_api)
+            response = chat.send_message(prompt_final)
+            st.session_state.history.append({"role": "assistant", "content": response.text})
+            
+        except Exception as e:
+            st.error(f"Erro: {e}")
+    
+    st.rerun()
