@@ -3,95 +3,110 @@ import google.generativeai as genai
 import tempfile
 import os
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA ---
+# --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(
-    page_title="DocuAnalysis AI",
-    page_icon="⚖️",
+    page_title="ChatDoc IA",
+    page_icon="🤖",
     layout="wide"
 )
 
-# --- 2. CARREGAR A CHAVE SECRETA ---
-# O código busca a chave automaticamente nos segredos do Streamlit Cloud
+# Estilo CSS para esconder menus chatos e deixar mais limpo
+st.markdown("""
+<style>
+    .stDeployButton {display:none;}
+    div[data-testid="stSidebar"] {background-color: #f0f2f6;}
+</style>
+""", unsafe_allow_html=True)
+
+# --- 2. CONEXÃO COM O GOOGLE ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-except FileNotFoundError:
-    # Se rodar localmente sem configurar, avisa o erro
-    st.error("Erro: Chave de API não encontrada. Configure os 'Secrets' no Streamlit Cloud.")
-    st.stop()
-except KeyError:
-    st.error("Erro: A chave 'GOOGLE_API_KEY' não foi definida nos segredos.")
+except Exception as e:
+    st.error("⚠️ Configure a chave de API nos 'Secrets' do Streamlit.")
     st.stop()
 
-# --- 3. O "CÉREBRO" DA IA (Instrução do Especialista) ---
-SYSTEM_INSTRUCTION = """
-Você é um Auditor Jurídico e Analista de Documentos Sênior.
-Sua função é analisar arquivos PDF e imagens para extrair dados com precisão forense.
+# --- 3. MEMÓRIA DA SESSÃO ---
+# Isso faz o site lembrar da conversa e do arquivo enquanto você usa
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "uploaded_file_ref" not in st.session_state:
+    st.session_state.uploaded_file_ref = None
 
-DIRETRIZES OBRIGATÓRIAS:
-1. RESUMO ESTRUTURADO: Comece sempre com um resumo executivo em tópicos.
-2. EXTRAÇÃO DE DADOS: Identifique nomes, datas, valores monetários e números de processos/contratos.
-3. ALERTA DE RISCO: Se for um contrato, destaque cláusulas que pareçam abusivas ou prazos críticos.
-4. FIDELIDADE: Não invente informações. Se o texto estiver ilegível, informe "Ilegível".
-5. IDIOMA: Português do Brasil (Formal e Técnico).
-"""
+# --- 4. BARRA LATERAL (UPLOAD) ---
+with st.sidebar:
+    st.title("📂 Documento")
+    st.info("Faça upload de um PDF para conversar com ele.")
+    uploaded_file = st.file_uploader("Escolha o arquivo:", type=["pdf", "png", "jpg"])
 
-# --- 4. INTERFACE DO USUÁRIO ---
-st.title("⚖️ DocuAnalysis Pro")
-st.markdown("### Inteligência Artificial para Análise Documental")
-st.markdown("---")
+    if uploaded_file:
+        # Botão para limpar a conversa se trocar de assunto
+        if st.button("🗑️ Limpar Conversa"):
+            st.session_state.chat_history = []
+            st.rerun()
 
-# Layout de duas colunas
-col1, col2 = st.columns([1, 2])
+# --- 5. LÓGICA PRINCIPAL ---
+st.title("🤖 ChatDoc Pro")
+st.caption("Converse com seus documentos usando Inteligência Artificial")
 
-with col1:
-    st.info("📂 **Área de Upload**")
-    uploaded_file = st.file_uploader("Arraste seu PDF ou Imagem aqui", type=["pdf", "jpg", "png", "jpeg"])
-    
-    # Opções rápidas
-    task_option = st.radio(
-        "O que você deseja fazer?",
-        ["Resumir o documento", "Extrair Cláusulas/Prazos", "Análise de Riscos", "Pergunta Personalizada"]
-    )
+if uploaded_file:
+    # --- Processamento do Arquivo (Só roda se mudar o arquivo) ---
+    if st.session_state.uploaded_file_ref is None:
+        with st.spinner("Processando documento..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_path = tmp_file.name
 
-with col2:
-    result_container = st.container()
+            # Envia para o Google e guarda a referência na memória
+            upload_ref = genai.upload_file(tmp_path)
+            st.session_state.uploaded_file_ref = upload_ref
+            
+            # Adiciona mensagem inicial da IA
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": "Olá! Li seu documento. O que você gostaria de saber sobre ele?"
+            })
+            os.remove(tmp_path) # Limpa o arquivo do PC
 
-# --- 5. PROCESSAMENTO ---
-if uploaded_file is not None:
-    # Salva o arquivo temporariamente para enviar ao Google
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.getvalue())
-        tmp_path = tmp_file.name
+    # --- Exibir o Histórico da Conversa ---
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # Botão de ação
-    if col1.button("🔍 Analisar Documento", type="primary"):
-        with result_container:
-            with st.spinner("A IA está lendo e analisando cada página..."):
+    # --- CAMPO DE DIGITAÇÃO (A Mágica Acontece Aqui) ---
+    prompt = st.chat_input("Pergunte algo sobre o arquivo (ex: 'Resuma os prazos')...")
+
+    if prompt:
+        # 1. Mostra o que o usuário digitou
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+
+        # 2. IA Pensa e Responde
+        with st.chat_message("assistant"):
+            with st.spinner("Lendo e pensando..."):
                 try:
-                    # Prepara a pergunta final
-                    if task_option == "Pergunta Personalizada":
-                        user_q = st.text_input("Sua pergunta:", value="Qual o objeto deste contrato?")
-                        final_prompt = user_q
-                    else:
-                        final_prompt = f"Execute a seguinte tarefa: {task_option}"
-
-                    # Envia para a IA
-                    myfile = genai.upload_file(tmp_path)
-                    model = genai.GenerativeModel("gemini-3-flash-preview", system_instruction=SYSTEM_INSTRUCTION)
+                    # Configura o modelo (Usando o que funcionou pra você)
+                    model = genai.GenerativeModel("gemini-3-flash-preview")
                     
-                    response = model.generate_content([myfile, final_prompt])
+                    # Monta o histórico para enviar pra IA
+                    # (Envia o arquivo + as últimas perguntas para ela ter contexto)
+                    chat = model.start_chat(history=[
+                        {"role": "user", "parts": [st.session_state.uploaded_file_ref, "Analise este arquivo."]},
+                        {"role": "model", "parts": ["Entendido. O arquivo foi analisado."]}
+                    ])
                     
-                    # Exibe o resultado
-                    st.success("Análise Concluída!")
+                    # Envia a pergunta atual
+                    response = chat.send_message(prompt)
                     st.markdown(response.text)
                     
+                    # Salva a resposta no histórico
+                    st.session_state.chat_history.append({"role": "assistant", "content": response.text})
+                    
                 except Exception as e:
-                    st.error(f"Ocorreu um erro na análise: {e}")
-                finally:
-                    # Limpeza
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
+                    st.error(f"Erro: {e}")
 
-
-
+else:
+    # Tela de boas-vindas (sem arquivo)
+    st.markdown("### ⬅️ Comece fazendo upload de um PDF na barra lateral.")
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/PDF_file_icon.svg/833px-PDF_file_icon.svg.png", width=100)
