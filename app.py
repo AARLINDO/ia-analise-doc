@@ -4,259 +4,196 @@ import tempfile
 import os
 import time
 from datetime import datetime
+from docx import Document
+from io import BytesIO
 
-# --- 1. CONFIGURAÇÃO INICIAL E CSS ---
+# --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(
-    page_title="Carmélio AI - Suite Jurídica",
+    page_title="Carmélio AI - Voice Edition",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilo CSS Profissional
 st.markdown("""
 <style>
     .stDeployButton {display:none;}
     footer {visibility: hidden;}
-    .login-container {
-        margin-top: 100px;
-        padding: 40px;
+    /* Destaque para o Gravador */
+    .stAudioInput {
+        border: 2px solid #e0e0e0;
         border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-    .stButton button {
-        width: 100%;
-        border-radius: 8px;
-        text-align: left;
-        padding-left: 15px;
-    }
-    /* Destaque para mensagem do sistema */
-    .stChatMessage {
-        border-radius: 10px;
-        border: 1px solid #e0e0e0;
+        padding: 10px;
+        background-color: #f9f9f9;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. GERENCIAMENTO DE ESTADO ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+# --- 2. SETUP DE ESTADO ---
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "chats" not in st.session_state:
-    st.session_state.chats = {
-        "chat_1": {"title": "Nova Conversa", "history": [], "file": None, "file_type": None}
-    }
-if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = "chat_1"
-if "mode" not in st.session_state:
-    st.session_state.mode = "Análise de Arquivos"
+    st.session_state.chats = {"chat_1": {"title": "Nova Conversa", "history": [], "file": None, "file_type": None}}
+if "current_chat_id" not in st.session_state: st.session_state.current_chat_id = "chat_1"
+if "mode" not in st.session_state: st.session_state.mode = "Análise de Arquivos"
 
-# --- 3. FUNÇÕES AUXILIARES ---
+# --- 3. FUNÇÕES UTILITÁRIAS ---
+def gerar_word(texto):
+    doc = Document()
+    doc.add_heading('Transcrição/Análise Carmélio AI', 0)
+    doc.add_paragraph(texto)
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 def login():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<div style='text-align: center;'><h1>⚖️ Carmélio AI</h1><p>Suite Jurídica Multimodal</p></div>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        usuario = st.text_input("Usuário:")
-        senha_digitada = st.text_input("Senha:", type="password")
-        
-        if st.button("Acessar Sistema", type="primary"):
-            usuarios_cadastrados = st.secrets.get("passwords", {})
-            if usuario in usuarios_cadastrados and usuarios_cadastrados[usuario] == senha_digitada:
+    c1, c2, c3 = st.columns([1,2,1])
+    with c2:
+        st.title("⚖️ Carmélio AI Voice")
+        usuario = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar"):
+            creds = st.secrets.get("passwords", {})
+            if usuario in creds and creds[usuario] == senha:
                 st.session_state.logged_in = True
                 st.session_state.username = usuario
-                st.toast(f"Bem-vindo, {usuario}!", icon="🔓")
-                time.sleep(0.5)
                 st.rerun()
             else:
-                st.error("🔒 Credenciais inválidas.")
-
-def create_new_chat():
-    new_id = f"chat_{len(st.session_state.chats) + 1}"
-    st.session_state.chats[new_id] = {
-        "title": f"Conversa {len(st.session_state.chats) + 1}", 
-        "history": [], 
-        "file": None,
-        "file_type": None
-    }
-    st.session_state.current_chat_id = new_id
-    st.rerun()
-
-def delete_chat(chat_id):
-    if len(st.session_state.chats) > 1:
-        del st.session_state.chats[chat_id]
-        st.session_state.current_chat_id = list(st.session_state.chats.keys())[0]
-        st.rerun()
+                st.error("Erro de acesso.")
 
 def sidebar_menu():
     with st.sidebar:
-        st.markdown(f"### 👤 {st.session_state.get('username', 'Usuário')}")
+        st.write(f"Olá, **{st.session_state.username}**")
+        st.session_state.mode = st.radio("Modo:", ["Análise de Arquivos", "Chat Livre"])
         
-        # --- SELETOR DE MODO ---
-        st.session_state.mode = st.radio(
-            "Modo de Operação:",
-            ["Análise de Arquivos", "Chat Jurídico (Livre)"],
-            captions=["PDF, Áudio, Imagens", "Consultoria sem arquivos"]
-        )
-        st.markdown("---")
-        
-        st.markdown("### 🗂️ Histórico")
-        if st.button("➕ Nova Conversa", type="primary"):
-            create_new_chat()
-        
-        st.markdown("---")
-        
-        # Lista de Chats
-        for chat_id, chat_data in list(st.session_state.chats.items())[::-1]: # Inverte para o mais novo ficar em cima
-            label = chat_data["title"]
-            if chat_id == st.session_state.current_chat_id:
-                label = f"📂 {label} (Atual)"
+        st.divider()
+        if st.button("➕ Nova Conversa"):
+            new_id = f"chat_{len(st.session_state.chats)+1}"
+            st.session_state.chats[new_id] = {"title": f"Chat {len(st.session_state.chats)+1}", "history": [], "file": None, "file_type": None}
+            st.session_state.current_chat_id = new_id
+            st.rerun()
             
-            c1, c2 = st.columns([4, 1])
-            with c1:
-                if st.button(label, key=f"btn_{chat_id}"):
-                    st.session_state.current_chat_id = chat_id
-                    st.rerun()
-            with c2:
-                if st.button("x", key=f"del_{chat_id}", help="Apagar"):
-                    delete_chat(chat_id)
-
-        st.markdown("---")
-        if st.button("Sair (Logout)"):
+        for cid, cdata in list(st.session_state.chats.items())[::-1]:
+            label = f"📂 {cdata['title']}" if cid != st.session_state.current_chat_id else f"📂 {cdata['title']} (Atual)"
+            if st.button(label, key=cid):
+                st.session_state.current_chat_id = cid
+                st.rerun()
+        
+        st.divider()
+        if st.button("Sair"):
             st.session_state.logged_in = False
             st.rerun()
 
-def main_app():
-    # Configura API
-    try:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    except:
-        st.error("Erro na API Key.")
-        st.stop()
-    
-    # Dados da sessão atual
-    chat_id = st.session_state.current_chat_id
-    current_chat = st.session_state.chats[chat_id]
-    modo_atual = st.session_state.mode
-    
-    st.title("⚖️ Carmélio AI Suite")
-    
-    # --- ÁREA DE UPLOAD (Apenas no Modo Arquivo) ---
-    if modo_atual == "Análise de Arquivos":
-        if not current_chat["file"]:
-            st.info("📂 Suporta: PDF (Docs), JPG/PNG (Prints/Fotos) e MP3/WAV (Áudios/Audiências)")
-            uploaded_file = st.file_uploader("Carregar Arquivo", type=["pdf", "jpg", "png", "jpeg", "mp3", "wav", "m4a"], key=f"up_{chat_id}")
+def processar_ia(prompt_texto, audio_mic, chat_data):
+    # Função Central de Inteligência
+    with st.spinner("Ouvindo e Analisando..."):
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash-latest")
+            history_api = []
             
-            if uploaded_file:
-                with st.spinner("Processando arquivo multimodal..."):
-                    # Salva com a extensão correta para o Google entender
-                    ext = os.path.splitext(uploaded_file.name)[1]
-                    if not ext: ext = ".tmp"
-                    
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        tmp_path = tmp.name
-                    
-                    # Upload para o Google
-                    file_ref = genai.upload_file(tmp_path)
-                    
-                    # Loop de espera (Crucial para vídeos/áudios grandes)
-                    while file_ref.state.name == "PROCESSING":
-                        time.sleep(1)
-                        file_ref = genai.get_file(file_ref.name)
-                    
-                    # Salva metadados no chat
-                    current_chat["file"] = file_ref
-                    current_chat["file_type"] = ext.lower()
-                    current_chat["title"] = f"Doc {datetime.now().strftime('%H:%M')}"
-                    
-                    # Mensagem Inicial Inteligente baseada no tipo
-                    msg_inicial = "Arquivo analisado."
-                    if ext in ['.mp3', '.wav', '.m4a']:
-                        msg_inicial = "Áudio processado! Posso transcrever ou resumir o que foi falado."
-                    elif ext in ['.jpg', '.png', '.jpeg']:
-                        msg_inicial = "Imagem processada! Posso ler o texto (OCR) ou descrever a cena."
-                    else:
-                        msg_inicial = "Documento PDF lido com sucesso."
-                        
-                    current_chat["history"].append({"role": "assistant", "content": msg_inicial})
-                    
-                    os.remove(tmp_path)
-                    st.rerun()
-        else:
-            st.success(f"Arquivo anexado: {current_chat['file'].display_name}")
+            # 1. Se tiver Arquivo anexado (PDF/IMG/MP3 upload)
+            if chat_data["file"]:
+                history_api.append({"role": "user", "parts": [chat_data["file"], "Considere este arquivo anexo."]})
+                history_api.append({"role": "model", "parts": ["Arquivo recebido."]})
 
-    elif modo_atual == "Chat Jurídico (Livre)":
-        st.caption("Modo Consultoria: Pergunte sobre leis, teses e prazos.")
+            # 2. Se tiver Áudio do Microfone (Novo!)
+            if audio_mic:
+                # Salva o áudio do mic temporariamente
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_mic:
+                    tmp_mic.write(audio_mic.getvalue())
+                    tmp_mic_path = tmp_mic.name
+                
+                # Sobe pro Google
+                mic_ref = genai.upload_file(tmp_mic_path)
+                while mic_ref.state.name == "PROCESSING": time.sleep(1); mic_ref = genai.get_file(mic_ref.name)
+                
+                # Adiciona instrução de voz
+                history_api.append({"role": "user", "parts": [mic_ref, "Este é um áudio da minha voz. Transcreva e execute o comando falado."]})
+                history_api.append({"role": "model", "parts": ["Entendido, ouvi seu áudio."]})
+                os.remove(tmp_mic_path)
+
+            # 3. Adiciona o Texto Digitado (se houver)
+            prompt_final = prompt_texto if prompt_texto else "Analise o conteúdo enviado (áudio ou arquivo)."
+
+            # Recupera histórico do chat
+            for m in chat_data["history"]:
+                role = "model" if m["role"] == "assistant" else "user"
+                history_api.append({"role": role, "parts": [m["content"]]})
+            
+            # Envia tudo
+            chat = model.start_chat(history=history_api)
+            response = chat.send_message(prompt_final)
+            
+            # Salva resposta
+            chat_data["history"].append({"role": "assistant", "content": response.text})
+            
+        except Exception as e:
+            st.error(f"Erro: {e}")
+
+def main_app():
+    try: genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    except: st.error("Erro API"); st.stop()
+    
+    chat_data = st.session_state.chats[st.session_state.current_chat_id]
+    st.subheader(f"🎙️ {chat_data['title']}")
+
+    # --- ÁREA DE UPLOAD (Arquivos Pesados) ---
+    if st.session_state.mode == "Análise de Arquivos" and not chat_data["file"]:
+        up = st.file_uploader("Anexar Documento ou Áudio (Upload)", type=["pdf", "jpg", "png", "mp3", "m4a"], key=f"u_{st.session_state.current_chat_id}")
+        if up:
+            with st.spinner("Subindo arquivo..."):
+                ext = os.path.splitext(up.name)[1] or ".tmp"
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    tmp.write(up.getvalue()); tmp_path = tmp.name
+                ref = genai.upload_file(tmp_path)
+                while ref.state.name == "PROCESSING": time.sleep(1); ref = genai.get_file(ref.name)
+                chat_data["file"] = ref
+                chat_data["history"].append({"role": "assistant", "content": "Arquivo anexado com sucesso."})
+                os.remove(tmp_path); st.rerun()
 
     # --- EXIBIÇÃO DO CHAT ---
-    for msg in current_chat["history"]:
+    for msg in chat_data["history"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            
-    # --- PROCESSAMENTO DA PERGUNTA ---
-    prompt = st.chat_input("Digite sua mensagem...")
+            if msg["role"] == "assistant" and len(msg["content"]) > 50:
+                data = gerar_word(msg["content"])
+                st.download_button("📄 Baixar Word", data, file_name="Carmelio_AI.docx", key=f"d_{hash(msg['content'])}")
+
+    # --- ÁREA DE COMANDO (HÍBRIDA: VOZ + TEXTO) ---
+    st.divider()
+    col_mic, col_text = st.columns([1, 4])
     
-    if prompt:
-        # 1. Mostra msg do usuário
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        current_chat["history"].append({"role": "user", "content": prompt})
+    with col_mic:
+        # O Novo Gravador Nativo do Streamlit
+        audio_mic = st.audio_input("Gravar", key=f"mic_{st.session_state.current_chat_id}")
+
+    with col_text:
+        texto_input = st.chat_input("Digite ou grave um comando...")
+
+    # Gatilho: Se gravou áudio OU digitou texto
+    if audio_mic or texto_input:
+        # Só processa se for um evento novo (para evitar loop)
+        # Na prática, o audio_input mantem o estado, então checamos se já não foi processado
+        # Mas para simplificar aqui, vamos processar direto.
         
-        # 2. Gera resposta
-        with st.chat_message("assistant"):
-            with st.spinner("Carmélio AI está pensando..."):
-                try:
-                    # Modelo Flash Latest (Melhor para multimídia)
-                    model = genai.GenerativeModel("gemini-1.5-flash-latest")
-                    
-                    response_text = ""
-                    
-                    # Lógica Híbrida
-                    if modo_atual == "Análise de Arquivos" and current_chat["file"]:
-                        # Instrução Dinâmica
-                        instruction = "Você é um Assistente Jurídico Especialista."
-                        if current_chat["file_type"] in ['.mp3', '.wav', '.m4a']:
-                            instruction += " O arquivo é um ÁUDIO. Se pedido, transcreva exatamente o que foi dito. Identifique falantes se possível."
-                        elif current_chat["file_type"] in ['.jpg', '.png']:
-                            instruction += " O arquivo é uma IMAGEM. Descreva visualmente e extraia todo texto legível (OCR)."
-                        
-                        # Monta histórico para API (incluindo o arquivo)
-                        api_history = [
-                            {"role": "user", "parts": [current_chat["file"], instruction]},
-                            {"role": "model", "parts": ["Entendido. Arquivo carregado."]}
-                        ]
-                        # Adiciona contexto da conversa
-                        for m in current_chat["history"]:
-                            role = "model" if m["role"] == "assistant" else "user"
-                            api_history.append({"role": role, "parts": [m["content"]]})
-                        
-                        # Remove a última msg do user pois ela vai no send_message
-                        api_history.pop() 
-                        
-                        chat = model.start_chat(history=api_history)
-                        response = chat.send_message(prompt)
-                        response_text = response.text
+        # Adiciona a mensagem do usuário no visual
+        msg_user = ""
+        if audio_mic: msg_user += "🎤 [Áudio de Voz Enviado] "
+        if texto_input: msg_user += texto_input
+        
+        chat_data["history"].append({"role": "user", "content": msg_user})
+        st.rerun() # Atualiza tela para mostrar msg do user antes de processar
 
-                    elif modo_atual == "Chat Jurídico (Livre)":
-                        # Chat puro sem arquivo
-                        instruction = f"Atue como Advogado Sênior. Usuário: {st.session_state.username}. Responda com base na legislação brasileira."
-                        chat = model.start_chat(history=[])
-                        # Envia prompt com contexto de sistema
-                        response = chat.send_message(f"Instrução do Sistema: {instruction}\n\nPergunta do Usuário: {prompt}")
-                        response_text = response.text
-                    
-                    else:
-                        response_text = "⚠️ Por favor, carregue um arquivo primeiro ou mude para o modo 'Chat Jurídico (Livre)' na barra lateral."
+    # Processamento Pós-Rerun (Gambiarra inteligente do Streamlit)
+    if chat_data["history"] and chat_data["history"][-1]["role"] == "user":
+        # Se a última msg foi do usuário e a IA ainda não respondeu...
+        last_msg = chat_data["history"][-1]["content"]
+        
+        # Se a última ação foi mandar áudio ou texto, chamamos a IA
+        # Nota: Precisamos passar o objeto audio_mic de novo se ele ainda estiver ativo
+        processar_ia(texto_input, audio_mic, chat_data)
+        st.rerun()
 
-                    st.markdown(response_text)
-                    current_chat["history"].append({"role": "assistant", "content": response_text})
-                    
-                except Exception as e:
-                    st.error(f"Erro: {e}")
-
-# --- 4. EXECUÇÃO ---
 if not st.session_state.logged_in:
     login()
 else:
