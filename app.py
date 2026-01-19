@@ -59,23 +59,29 @@ if "current_chat_id" not in st.session_state:
 
 # --- 3. FUNÇÕES DO SISTEMA ---
 def login():
-    """Tela de Login Simples"""
+    """Tela de Login Multi-Usuário"""
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<div style='text-align: center;'><h1>⚖️ Carmélio AI</h1><p>Acesso Restrito ao Sistema Jurídico</p></div>", unsafe_allow_html=True)
         st.markdown("---")
         
-        senha_digitada = st.text_input("Digite sua senha de acesso:", type="password")
+        # Agora pedimos Usuário E Senha
+        usuario = st.text_input("Usuário:")
+        senha_digitada = st.text_input("Senha:", type="password")
         
         if st.button("Entrar no Sistema", type="primary"):
-            # A senha correta deve estar nos Secrets. Se não tiver configurado, usa "admin" para teste.
-            senha_correta = st.secrets.get("APP_PASSWORD", "admin123") 
+            # Busca a lista de senhas nos segredos
+            usuarios_cadastrados = st.secrets.get("passwords", {})
             
-            if senha_digitada == senha_correta:
+            # Verifica se o usuário existe E se a senha bate
+            if usuario in usuarios_cadastrados and usuarios_cadastrados[usuario] == senha_digitada:
                 st.session_state.logged_in = True
+                st.session_state.username = usuario # Salva quem entrou
+                st.toast(f"Bem-vindo, {usuario}!", icon="🔓")
+                time.sleep(1)
                 st.rerun()
             else:
-                st.error("🔒 Senha incorreta.")
+                st.error("🔒 Usuário ou senha incorretos.")
 
 def create_new_chat():
     """Cria uma nova aba de conversa"""
@@ -127,9 +133,8 @@ def sidebar_menu():
         st.markdown("---")
         
         # Área do Usuário
-        with st.expander("👤 Perfil do Usuário"):
-            st.write("**Arthur Carmélio**")
-            st.caption("Administrador")
+        with st.expander(f"👤 {st.session_state.get('username', 'Usuário')}"):
+            st.caption("Conectado")
             if st.button("Sair (Logout)"):
                 st.session_state.logged_in = False
                 st.rerun()
@@ -239,3 +244,4 @@ if not st.session_state.logged_in:
 else:
     sidebar_menu()
     main_app()
+
