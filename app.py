@@ -29,7 +29,7 @@ THEME = {
 }
 
 # ==============================================================================
-# 2. CSS VISUAL (CORRIGIDO)
+# 2. CSS VISUAL (CORREÇÃO MOBILE)
 # ==============================================================================
 st.markdown(f"""
 <style>
@@ -39,10 +39,8 @@ st.markdown(f"""
         color: {THEME['text']};
     }}
     
-    /* ESCONDER APENAS O DESNECESSÁRIO (Mantendo o Menu visível) */
-    .stDeployButton {{display: none !important;}}
-    footer {{visibility: hidden;}}
-    div[data-testid="stToolbar"] {{display: none !important;}}
+    /* REMOVER BAGUNÇA */
+    .stDeployButton, footer, header, div[data-testid="stToolbar"] {{display: none !important;}}
     
     /* SIDEBAR */
     section[data-testid="stSidebar"] {{
@@ -50,28 +48,49 @@ st.markdown(f"""
         border-right: 1px solid #333;
     }}
     
-    /* INPUT FIXO NO RODAPÉ */
+    /* INPUT DE TEXTO (FIXO NO RODAPÉ) */
     .stChatInput {{
         position: fixed;
         bottom: 0;
         left: 0;
         right: 0;
         padding: 20px;
-        background: {THEME['bg']};
+        padding-top: 10px;
+        background-color: {THEME['bg']};
         z-index: 999;
         border-top: 1px solid #333;
     }}
     
-    /* ÁUDIO INPUT FLUTUANTE */
+    /* --- CORREÇÃO DO MICROFONE (GEMINI STYLE) --- */
     div[data-testid="stAudioInput"] {{
         position: fixed;
-        bottom: 90px;
-        right: 30px;
-        width: 300px;
-        background-color: {THEME['card']};
-        border-radius: 12px;
-        border: 1px solid #555;
+        bottom: 80px; /* Fica logo acima da barra de texto */
+        left: 0; 
+        right: 0;
+        margin: 0 auto; /* Centraliza na tela */
+        width: 90%; /* Ocupa largura boa no celular */
+        max-width: 600px; /* Não fica gigante no PC */
         z-index: 1000;
+        background-color: transparent; /* Fundo transparente para integrar */
+    }}
+    
+    /* Estiliza a caixinha interna do audio para ficar bonita */
+    div[data-testid="stAudioInput"] > div {{
+        background-color: {THEME['card']};
+        border: 1px solid #444;
+        border-radius: 20px;
+        color: white;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.2); /* Sombra pra cima */
+    }}
+    
+    /* Esconde o label "Voz" para economizar espaço */
+    div[data-testid="stAudioInput"] label {{
+        display: none;
+    }}
+
+    /* Aumentar espaço no fundo para o chat não ficar escondido */
+    .main .block-container {{
+        padding-bottom: 160px;
     }}
     
     /* TEXTO HERO (BOAS VINDAS) */
@@ -83,7 +102,7 @@ st.markdown(f"""
         -webkit-text-fill-color: transparent;
     }}
     
-    /* UPLOAD AREA PERSONALIZADA */
+    /* UPLOAD AREA */
     .upload-box {{
         border: 2px dashed #444;
         border-radius: 10px;
@@ -91,11 +110,6 @@ st.markdown(f"""
         text-align: center;
         background-color: {THEME['card']};
     }}
-    
-    /* SCROLLBAR */
-    ::-webkit-scrollbar {{width: 10px;}}
-    ::-webkit-scrollbar-track {{background: {THEME['bg']};}}
-    ::-webkit-scrollbar-thumb {{background: #444; border-radius: 5px;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -274,7 +288,7 @@ def render_main():
         st.markdown(f"""
         <div style="text-align: center; margin-top: 15vh;">
             <div class="hero-title">Olá, Arthur</div>
-            <p style="color: #888;">Sistema pronto. Carregue um arquivo ou comece a falar.</p>
+            <p style="color: #888;">Sistema pronto. Carregue um arquivo ou use a voz.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -307,11 +321,19 @@ def render_main():
                     if msg["role"] == "assistant":
                         docx = generate_docx(msg["content"])
                         st.download_button("⬇️ Baixar DOCX", docx, file_name="Carmelio.docx", key=f"d_{hash(msg['content'])}")
-            st.markdown("<div style='height: 150px;'></div>", unsafe_allow_html=True)
 
+# ==============================================================================
+# 7. HANDLER DE INPUT (CORREÇÃO MOBILE)
+# ==============================================================================
 def handle_input(txt_override=None):
-    prompt = st.chat_input("Mensagem para Carmélio OS...")
+    # O PULO DO GATO: Renderizar o áudio ANTES do chat input
+    # Isso garante que no layout eles fiquem próximos, mas controlados pelo CSS
+    
+    # Widget de Áudio (Agora centralizado via CSS)
     audio = st.audio_input("Voz", key="main_mic")
+    
+    # Widget de Texto (Fixo embaixo)
+    prompt = st.chat_input("Mensagem para Carmélio OS...")
     
     final_txt = txt_override if txt_override else prompt
     
@@ -325,10 +347,9 @@ def handle_input(txt_override=None):
         st.rerun()
 
 # ==============================================================================
-# 7. EXECUÇÃO
+# 8. EXECUÇÃO
 # ==============================================================================
 if __name__ == "__main__":
     render_sidebar()
     render_main()
-    # Input precisa ser o último renderizado para ficar fixo corretamente
     handle_input()
