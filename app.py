@@ -11,7 +11,7 @@ import base64
 # ==============================================================================
 st.set_page_config(
     page_title="Carmélio AI",
-    page_icon="✨",
+    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -97,6 +97,7 @@ class PDFGenerator:
         pdf.cell(0, 10, title, ln=True, align='L')
         pdf.ln(5)
         pdf.set_font("Arial", size=11)
+        # Tratamento de caracteres especiais básico para PDF
         safe_content = content.encode('latin-1', 'replace').decode('latin-1')
         pdf.multi_cell(0, 7, safe_content)
         return pdf.output(dest='S').encode('latin-1')
@@ -124,19 +125,18 @@ class GroqService:
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]
             }],
-            model="llama-3.2-11b-vision-preview",
+            model="llama-3.2-11b-vision-preview", # Modelo de Visão
             temperature=0.1,
         )
         return response.choices[0].message.content
 
-    # --- AQUI ESTÁ A CORREÇÃO QUE RESOLVE O ERRO ---
     def chat_response(self, history):
         """
-        Função corrigida para limpar mensagens antes de enviar e evitar BadRequestError.
+        Função corrigida e atualizada para o modelo novo.
         """
         clean_messages = []
         for msg in history:
-            # O Segredo: Filtra mensagens vazias ou sem conteúdo
+            # Filtra mensagens vazias
             if isinstance(msg, dict) and msg.get("content") and str(msg["content"]).strip():
                 clean_messages.append({
                     "role": msg["role"],
@@ -149,13 +149,13 @@ class GroqService:
         try:
             response = self.client.chat.completions.create(
                 messages=clean_messages,
-                model="llama3-70b-8192",
+                # ATUALIZADO AQUI: De llama3-70b-8192 para llama-3.3-70b-versatile
+                model="llama-3.3-70b-versatile",
                 temperature=0.5,
             )
             return response.choices[0].message.content
         except Exception as e:
             return f"Erro na IA: {str(e)}"
-    # --- FIM DA CORREÇÃO ---
 
     def analyze_text(self, text, mode):
         prompts = {
@@ -164,14 +164,18 @@ class GroqService:
             "peticao": "Estruture os fatos abaixo como uma Petição Inicial (Fatos, Direito, Pedidos)."
         }
         sys_msg = prompts.get(mode, prompts["resumo"])
-        response = self.client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": sys_msg},
-                {"role": "user", "content": text}
-            ],
-            model="llama3-70b-8192"
-        )
-        return response.choices[0].message.content
+        try:
+            response = self.client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": sys_msg},
+                    {"role": "user", "content": text}
+                ],
+                # ATUALIZADO AQUI TAMBÉM
+                model="llama-3.3-70b-versatile"
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Erro ao gerar documento: {str(e)}"
 
 # ==============================================================================
 # 3. ESTADO E CONFIGURAÇÃO
@@ -188,7 +192,6 @@ SYSTEM_API_KEY = st.secrets.get("GROQ_API_KEY", None)
 with st.sidebar:
     st.markdown("### ⚙️ Ajustes")
     
-    # Lógica Inteligente da Chave API
     if SYSTEM_API_KEY:
         st.success("✅ Sistema Conectado")
         api_key = SYSTEM_API_KEY
@@ -198,24 +201,20 @@ with st.sidebar:
     
     st.divider()
     
-    # Botão de Limpeza Discreto
     if st.button("Nova Sessão / Limpar"):
         st.session_state['transcription_text'] = ""
         st.session_state['chat_history'] = []
         st.rerun()
         
     st.divider()
-    # Créditos atualizados conforme solicitado
     st.markdown("<div style='text-align: center; color: #666; font-size: 12px;'>Desenvolvido por<br><b>Arthur Carmélio</b></div>", unsafe_allow_html=True)
 
 # ==============================================================================
 # 5. ÁREA PRINCIPAL
 # ==============================================================================
 
-# Cabeçalho Estilo Chat
 st.markdown("## Olá, Arthur. O que vamos analisar hoje?")
 
-# Layout de Abas mais limpo
 tab_media, tab_chat, tab_tools = st.tabs(["📂 Mídia & Upload", "💬 Chat Assistente", "🛠️ Ferramentas"])
 
 # --- ABA 1: MÍDIA ---
@@ -230,17 +229,19 @@ with tab_media:
                 st.error("Configure a API Key.")
             else:
                 with st.spinner("Processando áudio..."):
-                    groq_svc = GroqService(api_key)
-                    # Processamento Temp
-                    suffix = f".{uploaded_file.name.split('.')[-1]}"
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        tmp_path = tmp.name
-                    
-                    text = groq_svc.transcribe_audio(tmp_path)
-                    st.session_state['transcription_text'] = text
-                    os.unlink(tmp_path)
-                    st.toast("Transcrição concluída!", icon="🎉")
+                    try:
+                        groq_svc = GroqService(api_key)
+                        suffix = f".{uploaded_file.name.split('.')[-1]}"
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                            tmp.write(uploaded_file.getvalue())
+                            tmp_path = tmp.name
+                        
+                        text = groq_svc.transcribe_audio(tmp_path)
+                        st.session_state['transcription_text'] = text
+                        os.unlink(tmp_path)
+                        st.toast("Transcrição concluída!", icon="🎉")
+                    except Exception as e:
+                        st.error(f"Erro na transcrição: {e}")
 
     with col_cam:
         st.markdown("#### 📸 Câmera")
@@ -249,56 +250,51 @@ with tab_media:
             if not api_key: st.error("Falta API Key")
             else:
                 with st.spinner("Lendo documento..."):
-                    groq_svc = GroqService(api_key)
-                    text = groq_svc.analyze_image(camera_file.getvalue())
-                    st.session_state['transcription_text'] = text
-                    st.toast("Documento digitalizado!", icon="📄")
+                    try:
+                        groq_svc = GroqService(api_key)
+                        text = groq_svc.analyze_image(camera_file.getvalue())
+                        st.session_state['transcription_text'] = text
+                        st.toast("Documento digitalizado!", icon="📄")
+                    except Exception as e:
+                        st.error(f"Erro na visão: {e}")
 
-    # Exibição do Texto Extraído (Expansível para não poluir)
     if st.session_state['transcription_text']:
         with st.expander("Ver Conteúdo Extraído", expanded=True):
             st.text_area("Conteúdo Base:", st.session_state['transcription_text'], height=200)
 
 # --- ABA 2: CHAT (GEMINI STYLE) ---
 with tab_chat:
-    # Se não tiver conteúdo, mostra mensagem de boas vindas
     if not st.session_state['transcription_text']:
         st.info("💡 Dica: Faça upload de um áudio ou foto na primeira aba para dar contexto ao Chat.")
     
-    # Container das mensagens
     chat_container = st.container()
     
     with chat_container:
         for msg in st.session_state['chat_history']:
-            avatar = "👤" if msg["role"] == "user" else "✨"
+            avatar = "👤" if msg["role"] == "user" else "⚖️"
             with st.chat_message(msg["role"], avatar=avatar):
                 st.markdown(msg["content"])
     
-    # Input fixo no fundo (Estilo WhatsApp/Gemini)
     if prompt := st.chat_input("Pergunte sobre o documento ou peça uma petição..."):
         if not api_key:
             st.error("Conecte a API Key primeiro.")
         else:
-            # 1. Usuário
             st.session_state['chat_history'].append({"role": "user", "content": prompt})
             with chat_container:
                 with st.chat_message("user", avatar="👤"):
                     st.markdown(prompt)
             
-            # 2. Resposta IA
             with chat_container:
-                with st.chat_message("assistant", avatar="✨"):
-                    with st.spinner("Gerando resposta..."):
+                with st.chat_message("assistant", avatar="⚖️"):
+                    with st.spinner("Consultando jurisprudência..."):
                         groq_svc = GroqService(api_key)
                         
-                        # Monta contexto
                         messages = [
-                            {"role": "system", "content": "Você é o Carmélio AI. Responda de forma profissional e jurídica."},
-                            {"role": "system", "content": f"CONTEXTO DO CASO: {st.session_state['transcription_text']}"}
+                            {"role": "system", "content": "Você é o Carmélio AI, um assistente jurídico sênior e preciso."},
+                            {"role": "system", "content": f"CONTEXTO DO DOCUMENTO: {st.session_state['transcription_text']}"}
                         ]
                         messages.extend(st.session_state['chat_history'])
                         
-                        # AQUI: A chamada agora é segura e não vai dar erro 400
                         response = groq_svc.chat_response(messages)
                         st.markdown(response)
                         
@@ -322,7 +318,6 @@ with tab_tools:
             st.subheader("Documento Gerado")
             st.write(doc_text)
             
-            # Botão Download PDF
             pdf_gen = PDFGenerator()
             pdf_bytes = pdf_gen.create_report(f"Documento Gerado: {action.upper()}", doc_text)
             st.download_button("⬇️ Baixar PDF", data=bytes(pdf_bytes), file_name="documento.pdf", mime="application/pdf")
