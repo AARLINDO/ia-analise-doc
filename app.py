@@ -6,6 +6,7 @@ from datetime import datetime
 from fpdf import FPDF
 import base64
 import yt_dlp
+import graphviz # Certifique-se que está no requirements.txt
 
 # ==============================================================================
 # 1. CONFIGURAÇÕES VISUAIS (INTERFACE EM PORTUGUÊS)
@@ -168,7 +169,7 @@ with st.sidebar:
         st.session_state['chat_history'] = []
         st.rerun()
     
-    # --- CRÉDITOS (ADICIONADO AQUI) ---
+    # --- CRÉDITOS ---
     st.divider()
     st.markdown("""
     <div style='text-align: center; font-size: 12px; color: #888;'>
@@ -307,4 +308,13 @@ with tab4:
                     st.subheader("📝 Guia da Peça")
                     st.write(guia)
                     st.download_button("Baixar Resumo (.txt)", guia, "aula_estrategia.txt")
-                with col_y2
+                with col_y2: # <--- AQUI ESTAVA O ERRO (Faltava os dois pontos)
+                    st.subheader("🔄 Fluxo Lógico")
+                    try:
+                        st.graphviz_chart(dot_code)
+                    except:
+                        st.warning("O fluxograma não pôde ser gerado visualmente, mas o resumo está ao lado.")
+                    
+            except Exception as e:
+                status.update(label="Erro!", state="error")
+                st.error(f"Ocorreu um erro: {str(e)}")
