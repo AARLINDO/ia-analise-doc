@@ -1,3 +1,6 @@
 streamlit
 google-generativeai
 python-docx
+streamlit
+groq
+fpdf
