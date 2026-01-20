@@ -5,10 +5,10 @@ from groq import Groq
 from datetime import datetime
 from fpdf import FPDF
 import base64
-import yt_dlp # Nova ferramenta para YouTube
+import yt_dlp
 
 # ==============================================================================
-# 1. CONFIGURAÇÕES VISUAIS
+# 1. CONFIGURAÇÕES VISUAIS (ESTILO GEMINI)
 # ==============================================================================
 st.set_page_config(
     page_title="Carmélio AI Studio",
@@ -20,13 +20,32 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; }
+    
+    /* Botões com degradê elegante */
     .stButton>button {
         background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
         color: white; border: none; border-radius: 8px; height: 45px;
+        font-weight: 600;
     }
+    
+    /* Ajuste das Abas */
     .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; font-weight: 600; }
+    .stTabs [data-baseweb="tab"] { height: 50px; font-weight: 600; font-size: 16px; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] { color: #4facfe; border-bottom: 2px solid #4facfe; }
+
+    /* Estilo da Mensagem de Boas Vindas (Centro da Tela) */
+    .welcome-container {
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        justify-content: center; 
+        height: 50vh; 
+        text-align: center;
+        color: #E0E0E0;
+    }
+    .welcome-icon { font-size: 80px; margin-bottom: 20px; }
+    .welcome-text { font-size: 32px; font-weight: 700; margin-bottom: 10px; }
+    .welcome-sub { font-size: 18px; color: #888; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,7 +71,6 @@ class PDFGenerator:
 class GroqService:
     def __init__(self, api_key):
         self.client = Groq(api_key=api_key)
-        # MODELO ATUALIZADO (Llama 3.3)
         self.model_name = "llama-3.3-70b-versatile"
 
     def transcribe_audio(self, file_path):
@@ -90,7 +108,7 @@ class GroqService:
         try:
             response = self.client.chat.completions.create(
                 messages=clean_messages,
-                model=self.model_name, # Usa o modelo novo configurado no init
+                model=self.model_name,
                 temperature=0.5,
             )
             return response.choices[0].message.content
@@ -102,7 +120,7 @@ class GroqService:
             "resumo": "Faça um resumo executivo jurídico detalhado.",
             "ata": "Reescreva como uma Ata Notarial formal.",
             "peticao": "Estruture como Petição Inicial (Fatos, Direito, Pedidos).",
-            "estrategia": "Atue como professor do Estratégia Concursos. Crie um GUIA DE PEÇA PRÁTICA com: 1. Endereçamento/Qualificação, 2. Fatos (Resumo), 3. Do Direito (Silepse: Premissa Maior/Menor/Conclusão), 4. Pedidos Taxativos, 5. Dicas da Banca (FGV)."
+            "estrategia": "Atue como professor do Estratégia Concursos. Crie um GUIA DE PEÇA PRÁTICA com: 1. Endereçamento/Qualificação, 2. Fatos (Resumo), 3. Do Direito (Silepse), 4. Pedidos, 5. Dicas da Banca."
         }
         sys_msg = prompts.get(mode, prompts["resumo"])
         response = self.client.chat.completions.create(
@@ -114,8 +132,7 @@ class GroqService:
     def generate_flowchart(self, text):
         prompt = f"""
         Crie um código GRAPHVIZ (DOT) válido que represente o passo a passo lógico jurídico do texto abaixo.
-        Use formas retangulares (box) para ações e losangos (diamond) para decisões.
-        Retorne APENAS o código DOT, começando com 'digraph G {{'. Sem markdown.
+        Retorne APENAS o código DOT.
         Texto: {text[:10000]}
         """
         response = self.client.chat.completions.create(
@@ -126,12 +143,11 @@ class GroqService:
         return code.replace("```dot", "").replace("```", "").strip()
 
 # ==============================================================================
-# 3. INTERFACE
+# 3. INTERFACE PRINCIPAL
 # ==============================================================================
 if 'transcription_text' not in st.session_state: st.session_state['transcription_text'] = ""
 if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
 
-# Autenticação
 SYSTEM_API_KEY = st.secrets.get("GROQ_API_KEY", None)
 
 with st.sidebar:
@@ -142,14 +158,13 @@ with st.sidebar:
     else:
         api_key = st.text_input("API Key:", type="password")
     
-    if st.button("🗑️ Limpar Sessão"):
+    if st.button("🗑️ Nova Sessão"):
         st.session_state['transcription_text'] = ""
         st.session_state['chat_history'] = []
         st.rerun()
 
-# Abas
 st.markdown("## ⚖️ Carmélio AI Studio")
-tab1, tab2, tab3, tab4 = st.tabs(["📂 Mídia", "💬 Chat", "🛠️ Docs", "📺 YouTube (Estudos)"])
+tab1, tab2, tab3, tab4 = st.tabs(["📂 Mídia", "💬 Chat Assistente", "🛠️ Docs", "📺 YouTube"])
 
 # --- ABA 1: MÍDIA ---
 with tab1:
@@ -183,23 +198,51 @@ with tab1:
         with st.expander("Ver Texto Extraído", expanded=True):
             st.text_area("Texto:", st.session_state['transcription_text'], height=200)
 
-# --- ABA 2: CHAT ---
+# --- ABA 2: CHAT (VISUAL GEMINI) ---
 with tab2:
+    # 1. Se não tem histórico, mostra tela de Boas-Vindas centralizada
+    if not st.session_state['chat_history']:
+        st.markdown("""
+        <div class='welcome-container'>
+            <div class='welcome-icon'>⚖️</div>
+            <div class='welcome-text'>Olá, Arthur.</div>
+            <div class='welcome-sub'>Como posso ajudar com seus processos hoje?</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Sugestões rápidas
+        cols = st.columns(3)
+        if cols[0].button("📝 Resumir caso"): 
+            st.session_state['chat_history'].append({"role": "user", "content": "Faça um resumo do caso carregado."})
+            st.rerun()
+        if cols[1].button("📜 Criar Petição"):
+            st.session_state['chat_history'].append({"role": "user", "content": "Crie uma petição inicial com base nisso."})
+            st.rerun()
+        if cols[2].button("🔍 Analisar Provas"):
+             st.session_state['chat_history'].append({"role": "user", "content": "Quais são as provas mais fortes aqui?"})
+             st.rerun()
+
+    # 2. Mostra o Histórico se existir
     for m in st.session_state['chat_history']:
-        st.chat_message(m["role"]).markdown(m["content"])
+        avatar = "👤" if m["role"] == "user" else "⚖️"
+        st.chat_message(m["role"], avatar=avatar).markdown(m["content"])
     
-    if p := st.chat_input("Dúvida ou comando..."):
+    # 3. Input Fixo Embaixo (Estilo Gemini)
+    if p := st.chat_input("Pergunte sobre o documento, peça peças ou dúvidas jurídicas..."):
         if not api_key: st.error("Sem chave.")
         else:
             st.session_state['chat_history'].append({"role": "user", "content": p})
-            st.chat_message("user").markdown(p)
-            with st.chat_message("assistant"):
+            st.chat_message("user", avatar="👤").markdown(p)
+            with st.chat_message("assistant", avatar="⚖️"):
                 with st.spinner("Pensando..."):
                     groq = GroqService(api_key)
-                    msgs = [{"role": "system", "content": f"Contexto: {st.session_state['transcription_text']}"}] + st.session_state['chat_history']
+                    # Adiciona contexto do documento se houver
+                    contexto = f"CONTEXTO DO DOCUMENTO: {st.session_state['transcription_text']}" if st.session_state['transcription_text'] else ""
+                    msgs = [{"role": "system", "content": f"Você é o Carmélio AI, assistente jurídico. {contexto}"}] + st.session_state['chat_history']
                     resp = groq.chat_response(msgs)
                     st.markdown(resp)
             st.session_state['chat_history'].append({"role": "assistant", "content": resp})
+            st.rerun()
 
 # --- ABA 3: DOCS ---
 with tab3:
@@ -217,7 +260,7 @@ with tab3:
             pdf = PDFGenerator().create_report(mode.upper(), res)
             st.download_button("Baixar PDF", data=bytes(pdf), file_name="doc.pdf", mime="application/pdf")
 
-# --- ABA 4: YOUTUBE (NOVA!) ---
+# --- ABA 4: YOUTUBE ---
 with tab4:
     st.markdown("### 🎓 Modo Estratégia: Videoaula -> Peça + Fluxograma")
     url = st.text_input("Cole o link do YouTube aqui:")
@@ -227,30 +270,24 @@ with tab4:
         else:
             status = st.status("Baixando áudio do YouTube...", expanded=True)
             try:
-                # 1. Download
                 ydl_opts = {'format': 'bestaudio/best', 'outtmpl': '%(id)s.%(ext)s', 'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3'}], 'quiet': True}
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
                     audio_file = f"{info['id']}.mp3"
                 
-                # 2. Transcrição
-                status.update(label="Transcrevendo (pode demorar)...", state="running")
+                status.update(label="Transcrevendo...", state="running")
                 groq = GroqService(api_key)
-                # Corta para 25MB (limite aproximado) se for muito grande, ou usa pydub futuramente
                 text_yt = groq.transcribe_audio(audio_file)
                 if os.path.exists(audio_file): os.unlink(audio_file)
                 
-                # 3. Análise Estratégia
-                status.update(label="Gerando Guia de Peça...", state="running")
+                status.update(label="Gerando Guia...", state="running")
                 guia = groq.analyze_text(text_yt, "estrategia")
                 
-                # 4. Fluxograma
-                status.update(label="Desenhando Fluxograma...", state="running")
+                status.update(label="Desenhando Fluxo...", state="running")
                 dot_code = groq.generate_flowchart(guia)
                 
                 status.update(label="Concluído!", state="complete", expanded=False)
                 
-                # Exibição
                 col_y1, col_y2 = st.columns([1, 1])
                 with col_y1:
                     st.subheader("📝 Guia da Peça")
