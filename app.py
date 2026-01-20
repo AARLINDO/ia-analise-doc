@@ -129,13 +129,33 @@ class GroqService:
         )
         return response.choices[0].message.content
 
+    # --- AQUI ESTÁ A CORREÇÃO QUE RESOLVE O ERRO ---
     def chat_response(self, history):
-        response = self.client.chat.completions.create(
-            messages=history,
-            model="llama3-70b-8192",
-            temperature=0.5,
-        )
-        return response.choices[0].message.content
+        """
+        Função corrigida para limpar mensagens antes de enviar e evitar BadRequestError.
+        """
+        clean_messages = []
+        for msg in history:
+            # O Segredo: Filtra mensagens vazias ou sem conteúdo
+            if isinstance(msg, dict) and msg.get("content") and str(msg["content"]).strip():
+                clean_messages.append({
+                    "role": msg["role"],
+                    "content": str(msg["content"])
+                })
+
+        if not clean_messages:
+            return "Erro: Nenhuma mensagem válida para enviar à IA."
+
+        try:
+            response = self.client.chat.completions.create(
+                messages=clean_messages,
+                model="llama3-70b-8192",
+                temperature=0.5,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Erro na IA: {str(e)}"
+    # --- FIM DA CORREÇÃO ---
 
     def analyze_text(self, text, mode):
         prompts = {
@@ -278,6 +298,7 @@ with tab_chat:
                         ]
                         messages.extend(st.session_state['chat_history'])
                         
+                        # AQUI: A chamada agora é segura e não vai dar erro 400
                         response = groq_svc.chat_response(messages)
                         st.markdown(response)
                         
