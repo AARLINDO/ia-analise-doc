@@ -80,7 +80,7 @@ class GroqService:
                 file=(os.path.basename(file_path), file.read()),
                 model="whisper-large-v3",
                 response_format="text",
-                language="pt" # Forçando Português na transcrição
+                language="pt"
             )
 
     def analyze_image(self, image_bytes):
@@ -152,6 +152,7 @@ if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
 
 SYSTEM_API_KEY = st.secrets.get("GROQ_API_KEY", None)
 
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.markdown("### ⚙️ Carmélio AI")
     if SYSTEM_API_KEY:
@@ -166,6 +167,15 @@ with st.sidebar:
         st.session_state['transcription_text'] = ""
         st.session_state['chat_history'] = []
         st.rerun()
+    
+    # --- CRÉDITOS (ADICIONADO AQUI) ---
+    st.divider()
+    st.markdown("""
+    <div style='text-align: center; font-size: 12px; color: #888;'>
+        Desenvolvido por<br>
+        <strong>Arthur Carmélio</strong>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown("## ⚖️ Carmélio AI Studio")
 tab1, tab2, tab3, tab4 = st.tabs(["📂 Mídia & Arquivos", "💬 Chat Assistente", "🛠️ Gerador de Peças", "📺 YouTube (Estudos)"])
@@ -206,7 +216,6 @@ with tab1:
 
 # --- ABA 2: CHAT (VISUAL GEMINI) ---
 with tab2:
-    # 1. Tela de Boas-Vindas em PT-BR
     if not st.session_state['chat_history']:
         st.markdown("""
         <div class='welcome-container'>
@@ -216,7 +225,6 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
         
-        # Sugestões rápidas
         cols = st.columns(3)
         if cols[0].button("📝 Resumir caso"): 
             st.session_state['chat_history'].append({"role": "user", "content": "Faça um resumo detalhado deste caso."})
@@ -228,12 +236,10 @@ with tab2:
              st.session_state['chat_history'].append({"role": "user", "content": "Quais são os riscos jurídicos aqui?"})
              st.rerun()
 
-    # 2. Histórico
     for m in st.session_state['chat_history']:
         avatar = "👤" if m["role"] == "user" else "⚖️"
         st.chat_message(m["role"], avatar=avatar).markdown(m["content"])
     
-    # 3. Input Fixo
     if p := st.chat_input("Digite sua dúvida jurídica ou comando..."):
         if not api_key: st.error("Conecte a API Key.")
         else:
@@ -242,7 +248,6 @@ with tab2:
             with st.chat_message("assistant", avatar="⚖️"):
                 with st.spinner("Consultando base jurídica..."):
                     groq = GroqService(api_key)
-                    # Forçando contexto em Português
                     contexto = f"CONTEXTO DO DOCUMENTO: {st.session_state['transcription_text']}" if st.session_state['transcription_text'] else ""
                     msgs = [{"role": "system", "content": f"Você é o Carmélio AI, um assistente jurídico especialista na legislação brasileira. Responda sempre em Português do Brasil. {contexto}"}] + st.session_state['chat_history']
                     resp = groq.chat_response(msgs)
@@ -302,13 +307,4 @@ with tab4:
                     st.subheader("📝 Guia da Peça")
                     st.write(guia)
                     st.download_button("Baixar Resumo (.txt)", guia, "aula_estrategia.txt")
-                with col_y2:
-                    st.subheader("🔄 Fluxo Lógico")
-                    try:
-                        st.graphviz_chart(dot_code)
-                    except:
-                        st.warning("O fluxograma não pôde ser gerado visualmente, mas o resumo está ao lado.")
-                    
-            except Exception as e:
-                status.update(label="Erro!", state="error")
-                st.error(f"Ocorreu um erro: {str(e)}")
+                with col_y2
