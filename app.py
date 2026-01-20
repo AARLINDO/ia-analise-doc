@@ -7,55 +7,98 @@ from fpdf import FPDF
 import base64
 
 # ==============================================================================
-# 1. CONFIGURAÇÕES GERAIS E ESTILO (CSS PRO)
+# 1. CONFIGURAÇÕES VISUAIS (GEMINI STYLE)
 # ==============================================================================
 st.set_page_config(
-    page_title="Carmélio AI Studio",
-    page_icon="⚖️",
+    page_title="Carmélio AI",
+    page_icon="✨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilização CSS
+# CSS Customizado para Interface "Clean"
 st.markdown("""
 <style>
-    .main { background-color: #0E1117; color: #FAFAFA; }
-    h1, h2, h3 { font-family: 'Helvetica Neue', sans-serif; font-weight: 600; }
-    .stMetric { background-color: #262730; padding: 15px; border-radius: 10px; border: 1px solid #3d3d3d; }
-    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; transition: all 0.3s; }
-    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 4px 8px rgba(255, 75, 75, 0.2); }
-    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 5px; padding: 10px; }
-    .stTextArea textarea { font-size: 16px; background-color: #1c1c1c; border: 1px solid #4a4a4a; }
+    /* Remover padding excessivo do topo */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
     
-    /* Estilo para Mensagens de Chat */
-    .stChatMessage { background-color: #1c1c1c; border-radius: 10px; padding: 10px; margin-bottom: 5px;}
+    /* Fundo e Cores Globais */
+    .stApp {
+        background-color: #0E1117;
+    }
+    
+    /* Esconder Menu Hamburger e Rodapé Padrão */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Estilização das Abas (Mais discretas) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: #4facfe;
+        border-bottom: 2px solid #4facfe;
+    }
+    
+    /* Botões Modernos (Degradê sutil) */
+    .stButton>button {
+        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        height: 45px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(42, 82, 152, 0.4);
+    }
+    
+    /* Caixas de Texto (Sem bordas duras) */
+    .stTextArea textarea {
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 12px;
+        color: #e0e0e0;
+    }
+    
+    /* Cards de Métricas e Status */
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. CLASSES UTILITÁRIAS
+# 2. CLASSES DE SERVIÇO (BACKEND)
 # ==============================================================================
 
 class PDFGenerator:
-    def create_report(self, title, content, filename="relatorio.pdf"):
+    def create_report(self, title, content):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 10, "Carmélio AI - Relatório Jurídico", ln=True, align='C')
-        pdf.set_font("Arial", 'I', 10)
-        pdf.cell(0, 10, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
-        pdf.line(10, 30, 200, 30)
+        pdf.cell(0, 10, "Carmélio AI - Documento Oficial", ln=True, align='C')
+        pdf.line(10, 25, 200, 25)
         pdf.ln(20)
-        pdf.set_font("Arial", 'B', 14)
+        pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, title, ln=True, align='L')
         pdf.ln(5)
         pdf.set_font("Arial", size=11)
         safe_content = content.encode('latin-1', 'replace').decode('latin-1')
         pdf.multi_cell(0, 7, safe_content)
-        pdf.set_y(-15)
-        pdf.set_font("Arial", 'I', 8)
-        pdf.cell(0, 10, f'Página {pdf.page_no()}', 0, 0, 'C')
         return pdf.output(dest='S').encode('latin-1')
 
 class GroqService:
@@ -63,7 +106,6 @@ class GroqService:
         self.client = Groq(api_key=api_key)
 
     def transcribe_audio(self, file_path):
-        """Whisper Large V3 para áudio."""
         with open(file_path, "rb") as file:
             return self.client.audio.transcriptions.create(
                 file=(os.path.basename(file_path), file.read()),
@@ -73,43 +115,21 @@ class GroqService:
             )
 
     def analyze_image(self, image_bytes):
-        """Llama 3.2 Vision para ler documentos (OCR)."""
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
         response = self.client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Transcreva todo o texto legível desta imagem de documento jurídico. Se for manuscrito, tente decifrar. Retorne APENAS o texto."},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]
-                }
-            ],
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcreva todo o texto desta imagem. Se for documento jurídico, mantenha a formatação."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }],
             model="llama-3.2-11b-vision-preview",
             temperature=0.1,
         )
         return response.choices[0].message.content
 
-    def analyze_text(self, text, mode):
-        prompts = {
-            "resumo": "Você é um assistente jurídico sênior. Faça um resumo executivo do seguinte texto.",
-            "ata_notarial": "Você é um escrevente de cartório. Formate o texto como minuta de Ata Notarial.",
-            "peticao": "Você é um advogado. Extraia Fatos, Fundamentos e Pedidos do texto.",
-            "correcao": "Corrija pontuação e ortografia mantendo o tom jurídico."
-        }
-        system_prompt = prompts.get(mode, prompts["resumo"])
-        response = self.client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
-            ],
-            model="llama3-70b-8192",
-            temperature=0.3,
-        )
-        return response.choices[0].message.content
-
     def chat_response(self, history):
-        """Chat interativo estilo Gemini."""
         response = self.client.chat.completions.create(
             messages=history,
             model="llama3-70b-8192",
@@ -117,136 +137,171 @@ class GroqService:
         )
         return response.choices[0].message.content
 
-# ==============================================================================
-# 3. GERENCIAMENTO DE ESTADO
-# ==============================================================================
-if 'transcription_text' not in st.session_state: st.session_state['transcription_text'] = ""
-if 'analysis_result' not in st.session_state: st.session_state['analysis_result'] = ""
-if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
+    def analyze_text(self, text, mode):
+        prompts = {
+            "resumo": "Faça um resumo executivo jurídico detalhado do texto abaixo.",
+            "ata": "Reescreva o texto abaixo no formato formal de uma Ata Notarial.",
+            "peticao": "Estruture os fatos abaixo como uma Petição Inicial (Fatos, Direito, Pedidos)."
+        }
+        sys_msg = prompts.get(mode, prompts["resumo"])
+        response = self.client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": text}
+            ],
+            model="llama3-70b-8192"
+        )
+        return response.choices[0].message.content
 
 # ==============================================================================
-# 4. SIDEBAR
+# 3. ESTADO E CONFIGURAÇÃO
+# ==============================================================================
+if 'transcription_text' not in st.session_state: st.session_state['transcription_text'] = ""
+if 'chat_history' not in st.session_state: st.session_state['chat_history'] = []
+
+# Tenta pegar a chave automaticamente
+SYSTEM_API_KEY = st.secrets.get("GROQ_API_KEY", None)
+
+# ==============================================================================
+# 4. SIDEBAR (MINIMALISTA)
 # ==============================================================================
 with st.sidebar:
-    st.title("⚙️ Painel")
-    api_key = st.text_input("Chave API Groq", type="password")
-    if not api_key: api_key = st.secrets.get("GROQ_API_KEY", "")
+    st.markdown("### ⚙️ Ajustes")
+    
+    # Lógica Inteligente da Chave API
+    if SYSTEM_API_KEY:
+        st.success("✅ Sistema Conectado")
+        api_key = SYSTEM_API_KEY
+    else:
+        st.warning("⚠️ Chave não detectada")
+        api_key = st.text_input("Cole sua API Key:", type="password")
     
     st.divider()
-    st.info("Arthur Carmélio | Escrevente & Dev")
     
-    if st.button("🗑️ Limpar Memória"):
+    # Botão de Limpeza Discreto
+    if st.button("Nova Sessão / Limpar"):
         st.session_state['transcription_text'] = ""
         st.session_state['chat_history'] = []
         st.rerun()
+        
+    st.divider()
+    # Créditos atualizados conforme solicitado
+    st.markdown("<div style='text-align: center; color: #666; font-size: 12px;'>Desenvolvido por<br><b>Arthur Carmélio</b></div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 5. INTERFACE PRINCIPAL
+# 5. ÁREA PRINCIPAL
 # ==============================================================================
-st.title("Carmélio AI Studio 📸💬")
 
-# Criamos 4 Abas agora
-tab1, tab2, tab3, tab4 = st.tabs(["📂 Mídia (Áudio/Foto)", "🧠 Análise Rápida", "💬 Chat Jurídico", "📄 Exportar"])
+# Cabeçalho Estilo Chat
+st.markdown("## Olá, Arthur. O que vamos analisar hoje?")
 
-# --- ABA 1: UPLOAD & CÂMERA ---
-with tab1:
-    st.markdown("### Entrada de Dados")
-    input_type = st.radio("Escolha a fonte:", ["Upload de Arquivo (Áudio/Vídeo)", "Câmera (Documento)"], horizontal=True)
+# Layout de Abas mais limpo
+tab_media, tab_chat, tab_tools = st.tabs(["📂 Mídia & Upload", "💬 Chat Assistente", "🛠️ Ferramentas"])
 
-    file_content = None
+# --- ABA 1: MÍDIA ---
+with tab_media:
+    col_upload, col_cam = st.columns(2)
     
-    if input_type == "Upload de Arquivo (Áudio/Vídeo)":
-        uploaded_file = st.file_uploader("Arraste arquivos", type=["mp3", "mp4", "m4a", "wav", "ogg"])
-        if uploaded_file:
-            st.audio(uploaded_file)
-            if st.button("🚀 Transcrever Áudio", type="primary") and api_key:
-                with st.spinner("Ouvindo e transcrevendo..."):
+    with col_upload:
+        st.markdown("#### 📤 Arquivos")
+        uploaded_file = st.file_uploader("Solte áudio ou vídeo aqui", type=["mp3", "m4a", "wav", "ogg"])
+        if uploaded_file and st.button("Transcrever Arquivo"):
+            if not api_key:
+                st.error("Configure a API Key.")
+            else:
+                with st.spinner("Processando áudio..."):
                     groq_svc = GroqService(api_key)
+                    # Processamento Temp
                     suffix = f".{uploaded_file.name.split('.')[-1]}"
                     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                         tmp.write(uploaded_file.getvalue())
                         tmp_path = tmp.name
+                    
                     text = groq_svc.transcribe_audio(tmp_path)
                     st.session_state['transcription_text'] = text
                     os.unlink(tmp_path)
-                    st.success("Áudio processado!")
+                    st.toast("Transcrição concluída!", icon="🎉")
 
-    else: # MODO CÂMERA
-        camera_file = st.camera_input("Tire uma foto do documento")
-        if camera_file and api_key:
-            if st.button("📸 Ler Documento", type="primary"):
-                with st.spinner("Analisando imagem com Visão Computacional..."):
+    with col_cam:
+        st.markdown("#### 📸 Câmera")
+        camera_file = st.camera_input("Digitalizar Documento")
+        if camera_file and st.button("Processar Foto"):
+            if not api_key: st.error("Falta API Key")
+            else:
+                with st.spinner("Lendo documento..."):
                     groq_svc = GroqService(api_key)
                     text = groq_svc.analyze_image(camera_file.getvalue())
                     st.session_state['transcription_text'] = text
-                    st.success("Imagem lida com sucesso!")
+                    st.toast("Documento digitalizado!", icon="📄")
 
-    # Mostra o texto extraído (seja de áudio ou foto)
+    # Exibição do Texto Extraído (Expansível para não poluir)
     if st.session_state['transcription_text']:
-        st.divider()
-        st.subheader("Conteúdo Extraído:")
-        st.text_area("", st.session_state['transcription_text'], height=250)
+        with st.expander("Ver Conteúdo Extraído", expanded=True):
+            st.text_area("Conteúdo Base:", st.session_state['transcription_text'], height=200)
 
-# --- ABA 2: ANÁLISE RÁPIDA (O código antigo) ---
-with tab2:
-    st.header("Ferramentas de Texto")
-    if st.session_state['transcription_text']:
-        mode = st.selectbox("Modelo:", ["Resumo", "Ata_Notarial", "Peticao", "Correcao"])
-        if st.button("Gerar Análise"):
-            groq_svc = GroqService(api_key)
-            res = groq_svc.analyze_text(st.session_state['transcription_text'], mode.lower())
-            st.session_state['analysis_result'] = res
-        
-        if st.session_state['analysis_result']:
-            st.text_area("Resultado:", st.session_state['analysis_result'], height=400)
-    else:
-        st.info("Processe um arquivo na Aba 1 primeiro.")
-
-# --- ABA 3: CHAT JURÍDICO (NOVO!) ---
-with tab3:
-    st.header("💬 Assistente Virtual")
+# --- ABA 2: CHAT (GEMINI STYLE) ---
+with tab_chat:
+    # Se não tiver conteúdo, mostra mensagem de boas vindas
+    if not st.session_state['transcription_text']:
+        st.info("💡 Dica: Faça upload de um áudio ou foto na primeira aba para dar contexto ao Chat.")
     
-    # Prepara o contexto inicial para a IA saber sobre o que falar
-    context_msg = f"Use este texto como base para responder as perguntas: {st.session_state['transcription_text'][:10000]}"
+    # Container das mensagens
+    chat_container = st.container()
     
-    # Mostra histórico
-    for msg in st.session_state['chat_history']:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            
-    # Input do Chat
-    if prompt := st.chat_input("Pergunte algo sobre o documento/áudio..."):
+    with chat_container:
+        for msg in st.session_state['chat_history']:
+            avatar = "👤" if msg["role"] == "user" else "✨"
+            with st.chat_message(msg["role"], avatar=avatar):
+                st.markdown(msg["content"])
+    
+    # Input fixo no fundo (Estilo WhatsApp/Gemini)
+    if prompt := st.chat_input("Pergunte sobre o documento ou peça uma petição..."):
         if not api_key:
-            st.error("Sem chave API.")
+            st.error("Conecte a API Key primeiro.")
         else:
-            # 1. Adiciona pergunta do usuário
+            # 1. Usuário
             st.session_state['chat_history'].append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            with chat_container:
+                with st.chat_message("user", avatar="👤"):
+                    st.markdown(prompt)
             
-            # 2. Monta o histórico para enviar para a IA
-            messages_to_send = [
-                {"role": "system", "content": "Você é o Carmélio AI, um assistente jurídico prestativo. Responda com base no contexto fornecido pelo usuário."}
-            ]
-            
-            # Se tiver texto transcrito, adiciona como contexto oculto
-            if st.session_state['transcription_text']:
-                messages_to_send.append({"role": "system", "content": f"CONTEXTO DO DOCUMENTO/ÁUDIO: {st.session_state['transcription_text']}"})
-            
-            # Adiciona o histórico da conversa
-            messages_to_send.extend(st.session_state['chat_history'])
-            
-            # 3. Gera resposta
-            with st.chat_message("assistant"):
-                with st.spinner("Pensando..."):
-                    groq_svc = GroqService(api_key)
-                    response = groq_svc.chat_response(messages_to_send)
-                    st.markdown(response)
-            
-            # 4. Salva resposta
+            # 2. Resposta IA
+            with chat_container:
+                with st.chat_message("assistant", avatar="✨"):
+                    with st.spinner("Gerando resposta..."):
+                        groq_svc = GroqService(api_key)
+                        
+                        # Monta contexto
+                        messages = [
+                            {"role": "system", "content": "Você é o Carmélio AI. Responda de forma profissional e jurídica."},
+                            {"role": "system", "content": f"CONTEXTO DO CASO: {st.session_state['transcription_text']}"}
+                        ]
+                        messages.extend(st.session_state['chat_history'])
+                        
+                        response = groq_svc.chat_response(messages)
+                        st.markdown(response)
+                        
             st.session_state['chat_history'].append({"role": "assistant", "content": response})
 
-# --- ABA 4: EXPORTAR ---
-with tab3: # (Mudei para 4 na lógica mas mantive visualmente na ordem)
-    pass # A lógica de exportação é a mesma do código anterior, pode manter se quiser ou copiar da versão antiga para a aba 4.
-    # (Para não ficar gigante, foquei nas partes novas acima. A exportação continua igual).
+# --- ABA 3: FERRAMENTAS RÁPIDAS ---
+with tab_tools:
+    st.markdown("#### Geradores Automáticos")
+    col_t1, col_t2, col_t3 = st.columns(3)
+    
+    action = None
+    if col_t1.button("📝 Criar Resumo"): action = "resumo"
+    if col_t2.button("⚖️ Ata Notarial"): action = "ata"
+    if col_t3.button("📜 Petição Inicial"): action = "peticao"
+    
+    if action and st.session_state['transcription_text']:
+        with st.spinner("Escrevendo documento..."):
+            groq_svc = GroqService(api_key)
+            doc_text = groq_svc.analyze_text(st.session_state['transcription_text'], action)
+            
+            st.subheader("Documento Gerado")
+            st.write(doc_text)
+            
+            # Botão Download PDF
+            pdf_gen = PDFGenerator()
+            pdf_bytes = pdf_gen.create_report(f"Documento Gerado: {action.upper()}", doc_text)
+            st.download_button("⬇️ Baixar PDF", data=bytes(pdf_bytes), file_name="documento.pdf", mime="application/pdf")
