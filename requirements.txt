@@ -1,6 +1,5 @@
 streamlit
-google-generativeai
-python-docx
 groq
 fpdf
-
+yt-dlp
+graphviz
