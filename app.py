@@ -61,37 +61,62 @@ def navegar_para(pagina):
     st.rerun()
 
 # ==============================================================================
-# 3. FUNÇÕES IA
+# 3. FUNÇÕES IA (BLINDADAS)
 # ==============================================================================
 def criar_docx(texto):
-    doc = Document()
-    doc.add_heading('Documento Jurídico - Carmélio AI', 0)
-    doc.add_paragraph(texto)
-    doc.add_paragraph('\n\n___________________________________\nAssinatura')
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+    """Gera um arquivo Word na memória de forma segura."""
+    try:
+        doc = Document()
+        doc.add_heading('Documento Jurídico - Carmélio AI', 0)
+        
+        # Limpa caracteres que podem quebrar o XML do Word
+        texto_limpo = texto.replace('\x00', '') 
+        
+        for paragrafo in texto_limpo.split('\n'):
+            if paragrafo.strip():
+                doc.add_paragraph(paragrafo)
+                
+        doc.add_paragraph('\n\n___________________________________\nAssinatura')
+        
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        st.error(f"Erro ao gerar DOCX: {e}")
+        return None
 
 def get_gemini_response(prompt, file_data=None, mime_type=None, system_instruction="", anonimizar=False):
+    """Conecta ao Gemini com tratamento de erros robusto."""
     try:
-        api_key = st.secrets["GOOGLE_API_KEY"]
+        # Tenta pegar do secrets, se falhar, avisa sem quebrar
+        api_key = st.secrets.get("GOOGLE_API_KEY")
+        if not api_key:
+            return "⚠️ AVISO: A chave API não foi encontrada. Configure 'GOOGLE_API_KEY' nos Secrets."
+            
         genai.configure(api_key=api_key)
-    except:
-        return "⚠️ ERRO: Configure a chave no Secrets."
-    model_name = "gemini-flash-latest"
-    if anonimizar: system_instruction += "\n\nREGRA LGPD: Substitua nomes reais por [NOME], CPFs por [CPF]."
-    content = []
-    if file_data: content.append({"mime_type": mime_type, "data": file_data})
-    if prompt: content.append(prompt)
-    try:
+        
+        # Modelo atualizado e mais estável
+        model_name = "gemini-1.5-flash" 
+        
+        if anonimizar: 
+            system_instruction += "\n\nREGRA DE PRIVACIDADE (LGPD): Você DEVE substituir todos os nomes reais de pessoas por [NOME], CPFs por [CPF] e endereços por [ENDEREÇO]. O documento deve ser anônimo."
+            
+        content = []
+        if file_data: 
+            content.append({"mime_type": mime_type, "data": file_data})
+        if prompt: 
+            content.append(prompt)
+            
         model = genai.GenerativeModel(model_name, system_instruction=system_instruction)
         response = model.generate_content(content)
         return response.text
-    except Exception as e: return f"❌ Erro: {str(e)}"
+        
+    except Exception as e:
+        return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 4. BARRA LATERAL (COM SEU PERFIL E CONTATOS)
+# 4. BARRA LATERAL
 # ==============================================================================
 with st.sidebar:
     st.markdown("# 🏛️ Carmélio AI")
@@ -101,11 +126,10 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # === ÁREA DO ESPECIALISTA (NOVO!) ===
+    # === ÁREA DO ESPECIALISTA ===
     st.markdown("### 👨‍⚖️ O Especialista")
     st.info("**Arthur Carmélio**\n\nAdvogado, Escritor e Especialista em Registros Públicos.")
     
-    # Botões de Link Externo
     st.markdown("""
     <a href="https://www.linkedin.com/in/arthurcarmelio/" target="_blank">
         👔 Conectar no LinkedIn
@@ -118,9 +142,13 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🛡️ Configuração")
     modo_anonimo = st.toggle("Modo LGPD (Anonimizar)", value=False)
-    termo_aceite = st.checkbox("Aceito processar dados.", value=True)
+    
+    # Termo de aceite simples e direto
+    termo_aceite = st.checkbox("Aceito processar dados para fins jurídicos.", value=True)
 
-if not termo_aceite: st.stop()
+if not termo_aceite: 
+    st.warning("⚠️ Você precisa aceitar o processamento de dados para usar a ferramenta.")
+    st.stop()
 
 # ==============================================================================
 # 5. DASHBOARD (TELA INICIAL)
@@ -153,7 +181,7 @@ if st.session_state.pagina_atual == 'home':
         
     st.markdown("---")
     
-    # === ÁREA DE SERVIÇOS REAIS (NOVO!) ===
+    # === ÁREA DE SERVIÇOS REAIS ===
     st.subheader("🔍 Precisa de um Serviço Humano?")
     st.markdown("A IA ajuda, mas alguns casos exigem um especialista presencial.")
     
@@ -164,7 +192,7 @@ if st.session_state.pagina_atual == 'home':
             <h3>📜 Busca de Certidões</h3>
             <p>Precisa da via física ou busca em cartórios antigos?</p>
             <p style="color: #bbb;">• 2ª Via de Certidões<br>• Busca de Bens<br>• Regularização Imobiliária</p>
-            <a href="https://wa.me/5548920039720?text=Ol%C3%A1,%20preciso%20de%20ajuda%20com%20Busca%20de%20Certid%C3%B5es." target="_blank" style="background: #25D366; color: white !important; border: none;">
+            <a href="https://wa.me/5548920039720?text=Ol%C3%A1,%20preciso%20de%20ajuda%20com%20Busca%20de%20Certid%C3%B5es." target="_blank" style="background: #25D366; color: white !important; border: none; padding: 10px; border-radius: 5px; display: block; text-align: center; text-decoration: none; font-weight: bold;">
                 SOLICITAR BUSCA NO WHATSAPP
             </a>
         </div>
@@ -176,14 +204,14 @@ if st.session_state.pagina_atual == 'home':
             <h3>🤝 Assessoria Jurídica</h3>
             <p>Dúvidas complexas ou análise de casos concretos?</p>
             <p style="color: #bbb;">• Consultoria Civil<br>• Análise de Contratos<br>• Mentoria para OAB/Concursos</p>
-            <a href="https://wa.me/5548920039720?text=Ol%C3%A1,%20gostaria%20de%20uma%20Consultoria%20Jur%C3%ADdica." target="_blank" style="background: #25D366; color: white !important; border: none;">
+            <a href="https://wa.me/5548920039720?text=Ol%C3%A1,%20gostaria%20de%20uma%20Consultoria%20Jur%C3%ADdica." target="_blank" style="background: #25D366; color: white !important; border: none; padding: 10px; border-radius: 5px; display: block; text-align: center; text-decoration: none; font-weight: bold;">
                 FALAR COM ARTHUR
             </a>
         </div>
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# MÓDULOS (CONTRATOS, MENTOR, CARTÓRIO, ÁUDIO, TÉCNICO)
+# MÓDULOS INTERNOS
 # ==============================================================================
 elif st.session_state.pagina_atual == 'contratos':
     st.title("📝 Gerador de Contratos")
@@ -198,54 +226,80 @@ elif st.session_state.pagina_atual == 'contratos':
     val = c2.text_area("Valor/Condições:")
     extra = st.text_input("Cláusulas Extras:")
     if st.button("🚀 GERAR MINUTA"):
-        with st.spinner("Redigindo..."):
-            prompt = f"Redija um CONTRATO DE {tipo} completo. Parte A: {a}, Parte B: {b}, Objeto: {obj}, Valor: {val}, Extras: {extra}. Use juridiquês formal."
-            resp = get_gemini_response(prompt, anonimizar=modo_anonimo)
-            st.write(resp)
-            st.download_button("💾 Baixar", criar_docx(resp), f"Contrato_{tipo}.docx")
+        if not a or not b or not val:
+            st.warning("⚠️ Preencha pelo menos as Partes e o Valor.")
+        else:
+            with st.spinner("Redigindo..."):
+                prompt = f"Redija um CONTRATO DE {tipo} completo conforme leis brasileiras (CC/2002). Parte A: {a}, Parte B: {b}, Objeto: {obj}, Valor: {val}, Extras: {extra}. Use linguagem jurídica formal."
+                resp = get_gemini_response(prompt, anonimizar=modo_anonimo)
+                st.write(resp)
+                docx = criar_docx(resp)
+                if docx:
+                    st.download_button("💾 Baixar (.docx)", docx, f"Contrato_{tipo}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 elif st.session_state.pagina_atual == 'mentor':
     st.title("🤖 Mentor Jurídico")
     if st.button("⬅️ Voltar"): navegar_para('home')
     modo = st.radio("Modo:", ["OAB", "PCSC"], horizontal=True)
-    inst = "Seja examinador OAB." if "OAB" in modo else "Seja mentor policial."
+    inst = "Atue como examinador rigoroso da OAB. Cite artigos e súmulas." if "OAB" in modo else "Atue como mentor para carreiras policiais em SC. Foco em Direito Penal e Administrativo."
+    
     if 'chat_mentor' not in st.session_state: st.session_state.chat_mentor = []
-    for m in st.session_state.chat_mentor: st.chat_message(m['role']).write(m['content'])
-    if p := st.chat_input("Dúvida..."):
+    
+    for m in st.session_state.chat_mentor: 
+        st.chat_message(m['role']).write(m['content'])
+        
+    if p := st.chat_input("Digite sua dúvida ou cole uma questão..."):
         st.session_state.chat_mentor.append({"role":"user", "content":p})
         st.chat_message("user").write(p)
         with st.chat_message("assistant"):
-            r = get_gemini_response(p, system_instruction=inst, anonimizar=modo_anonimo)
-            st.write(r)
-            st.session_state.chat_mentor.append({"role":"assistant", "content":r})
+            with st.spinner("Analisando..."):
+                r = get_gemini_response(p, system_instruction=inst, anonimizar=modo_anonimo)
+                st.write(r)
+                st.session_state.chat_mentor.append({"role":"assistant", "content":r})
 
 elif st.session_state.pagina_atual == 'cartorio':
     st.title("🏛️ Cartório Digital")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    up = st.file_uploader("Imagem/PDF", type=["jpg","png","pdf"])
-    if up and st.button("📝 EXTRAIR"):
-        with st.spinner("Lendo..."):
-            r = get_gemini_response("Inteiro Teor.", file_data=up.getvalue(), mime_type=up.type, anonimizar=modo_anonimo)
-            st.text_area("Texto:", r, height=400)
-            st.download_button("💾 Baixar Word", criar_docx(r), "InteiroTeor.docx")
+    st.info("📸 Tire foto de uma página de livro ou documento antigo para converter em texto editável.")
+    up = st.file_uploader("Imagem/PDF", type=["jpg","png","jpeg","pdf"])
+    if up and st.button("📝 EXTRAIR TEXTO"):
+        with st.spinner("Lendo documento..."):
+            r = get_gemini_response("Transcreva o texto desta imagem fielmente. Se for manuscrito, tente interpretar.", file_data=up.getvalue(), mime_type=up.type, anonimizar=modo_anonimo)
+            st.text_area("Texto Extraído:", r, height=400)
+            docx = criar_docx(r)
+            if docx:
+                st.download_button("💾 Baixar Editável (.docx)", docx, "InteiroTeor.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 elif st.session_state.pagina_atual == 'audio':
-    st.title("🎙️ Transcrição")
+    st.title("🎙️ Transcrição de Áudio")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    t1, t2 = st.tabs(["Gravar", "Upload"])
+    
+    t1, t2 = st.tabs(["Gravar Agora", "Upload de Arquivo"])
     ad=None; mime=None
+    
     with t1:
-        if r:=st.audio_input("Gravar"): ad=r.getvalue(); mime="audio/wav"
+        if r:=st.audio_input("Clique para gravar"): 
+            ad=r.getvalue(); mime="audio/wav"
     with t2:
-        if u:=st.file_uploader("Arquivo", type=["mp3","wav","m4a"]): ad=u.getvalue(); mime=u.type
-    if ad and st.button("TRANSCREVER"):
-        with st.spinner("Processando..."):
-            r = get_gemini_response("Transcreva.", file_data=ad, mime_type=mime, anonimizar=modo_anonimo)
+        if u:=st.file_uploader("Arquivo de Áudio", type=["mp3","wav","m4a","ogg"]): 
+            ad=u.getvalue(); mime=u.type
+            
+    if ad and st.button("TRANSCREVER ÁUDIO"):
+        with st.spinner("Ouvindo e transcrevendo..."):
+            r = get_gemini_response("Transcreva este áudio em Português do Brasil. Identifique interlocutores se possível.", file_data=ad, mime_type=mime, anonimizar=modo_anonimo)
             st.write(r)
-            st.download_button("💾 Baixar Word", criar_docx(r), "Transcricao.docx")
+            docx = criar_docx(r)
+            if docx:
+                st.download_button("💾 Baixar Transcrição (.docx)", docx, "Transcricao.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 elif st.session_state.pagina_atual == 'tecnico':
-    st.title("🧠 Bastidores")
+    st.title("🧠 Bastidores do Sistema")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    st.info("Sistema baseado em Google Gemini (Transformer Architecture).")
-    st.code("model = genai.GenerativeModel('gemini-flash-latest')", language="python")
+    st.info("Este sistema utiliza a arquitetura Transformer (Google Gemini 1.5 Flash) para processamento de linguagem natural e visão computacional.")
+    st.code("""
+# Exemplo de chamada da API (Simplificado)
+model = genai.GenerativeModel('gemini-1.5-flash')
+response = model.generate_content(['Transcreva este contrato...', imagem_contrato])
+print(response.text)
+    """, language="python")
+    st.success("O modelo Flash foi escolhido pela alta velocidade e baixo custo computacional, ideal para tarefas de texto e OCR.")
