@@ -5,3 +5,4 @@ groq
 fpdf
 yt-dlp
 graphviz
+pdfplumber
