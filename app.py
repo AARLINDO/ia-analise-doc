@@ -6,94 +6,59 @@ import base64
 import os
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E DESIGN "AI APP STYLE"
+# 1. CONFIGURAÇÃO E SEO (VISIBILIDADE NO GOOGLE)
 # ==============================================================================
-st.set_page_config(page_title="Carmélio AI", page_icon="⚖️", layout="wide")
+# Aqui definimos o Título que aparece na aba do navegador e para o Google
+st.set_page_config(
+    page_title="Carmélio AI | Assistente Jurídico, Contratos e Estudos OAB",
+    page_icon="⚖️",
+    layout="wide",
+    menu_items={
+        'Get Help': 'https://www.linkedin.com/in/arthurcarmelio/',
+        'Report a bug': "https://wa.me/5548920039720",
+        'About': "# Carmélio AI\nInteligência Artificial para Advogados e Cartórios."
+    }
+)
 
-# CSS para transformar o Streamlit em um "App Nativo"
+# CSS "Dark Mode Premium"
 st.markdown("""
 <style>
-    /* FUNDO E GERAL */
+    /* GERAL */
     .stApp { background-color: #0E1117; }
+    [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* SIDEBAR (Barra Lateral) */
-    [data-testid="stSidebar"] { 
-        background-color: #12141C; 
-        border-right: 1px solid #2B2F3B;
-    }
-    
-    /* REMOVER O CABEÇALHO PADRÃO DO STREAMLIT */
-    header {visibility: hidden;}
-    
-    /* ESTILO DOS MENUS DE NAVEGAÇÃO (RADIO) */
-    .stRadio > div {
-        background-color: transparent;
-    }
-    .stRadio label {
-        font-size: 16px;
-        padding: 10px;
-        border-radius: 8px;
-        transition: 0.3s;
-        cursor: pointer;
-    }
-    .stRadio label:hover {
-        background-color: #1F2430;
-    }
-    
-    /* BOTÕES PRINCIPAIS (GRADIENTE TECH) */
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 45px;
-        font-weight: 600;
-        border: none;
-        background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%); /* Azul para Roxo */
-        color: white;
-        box-shadow: 0 4px 14px 0 rgba(139, 92, 246, 0.3);
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px 0 rgba(139, 92, 246, 0.5);
-        color: white;
-    }
-    
-    /* INPUTS (CAIXAS DE TEXTO MAIS LIMPAS) */
+    /* INPUTS */
     .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
-        background-color: #161922;
-        border: 1px solid #2B2F3B;
-        color: #E0E7FF;
-        border-radius: 8px;
+        background-color: #161922; border: 1px solid #2B2F3B; color: #E0E7FF; border-radius: 8px;
     }
-    .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
-        border-color: #3B82F6;
-        box-shadow: none;
+    
+    /* BOTÕES */
+    .stButton>button {
+        width: 100%; border-radius: 8px; height: 45px; font-weight: 600; border: none;
+        background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+        color: white; transition: 0.3s;
     }
-
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4); color: white;}
+    
     /* TEXTOS */
-    h1 { font-family: 'Inter', sans-serif; font-weight: 700; color: #F3F4F6; }
-    h2, h3 { color: #E5E7EB; }
-    p, label { color: #9CA3AF; }
+    h1, h2, h3 { color: #F3F4F6; font-family: 'Inter', sans-serif; }
+    p, label, .stMarkdown { color: #9CA3AF; }
     
-    /* CARD DE PERFIL */
+    /* PERFIL */
     .profile-card {
-        background: #1F2430;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #2B2F3B;
-        text-align: center;
-        margin-bottom: 20px;
+        background: #1F2430; padding: 15px; border-radius: 10px; border: 1px solid #2B2F3B;
+        text-align: center; margin-bottom: 20px; margin-top: 10px;
     }
-    .profile-name { color: white; font-weight: bold; font-size: 16px; margin: 0;}
-    .profile-role { color: #3B82F6; font-size: 12px; margin-top: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;}
+    .profile-name { color: white; font-weight: bold; font-size: 16px; margin-top: 10px; }
+    .profile-role { color: #3B82F6; font-size: 12px; margin-top: 5px; font-weight: 600; text-transform: uppercase; }
     
-    /* SEPARADORES */
-    hr { border-color: #2B2F3B; margin: 2em 0; }
+    /* SEO FOOTER (Escondido visualmente mas legível para robôs - opcional) */
+    .seo-text { font-size: 1px; color: #0E1117; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. FUNÇÕES DO SISTEMA (GROQ / LLAMA 3)
+# 2. FUNÇÕES DO SISTEMA (BACKEND)
 # ==============================================================================
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -104,14 +69,9 @@ def criar_docx(texto):
     try:
         if not texto or "❌" in texto: return None
         doc = Document()
-        doc.add_heading('Documento Jurídico - Carmélio AI', 0)
-        texto_limpo = str(texto).replace('\x00', '')
-        for p in texto_limpo.split('\n'):
-            if p.strip(): 
-                paragraph = doc.add_paragraph(p)
-                if p.upper().startswith("CLÁUSULA") or p.upper().startswith("PARÁGRAFO"):
-                    paragraph.runs[0].bold = True
-        doc.add_paragraph('\n\n___________________________________\nAssinatura')
+        doc.add_heading('Documento Carmélio AI', 0)
+        for p in str(texto).replace('\x00', '').split('\n'):
+            if p.strip(): doc.add_paragraph(p)
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
@@ -121,14 +81,12 @@ def criar_docx(texto):
 def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="Você é um assistente útil."):
     client, erro = get_groq_client()
     if erro: return erro
-
     try:
         if task_type == "audio" and file_bytes:
             import tempfile
             suffix = ".mp3"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes)
-                tmp_path = tmp.name
+                tmp.write(file_bytes); tmp_path = tmp.name
             with open(tmp_path, "rb") as file:
                 transcription = client.audio.transcriptions.create(
                     file=(os.path.basename(tmp_path), file.read()),
@@ -136,225 +94,171 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
                 )
             os.unlink(tmp_path)
             return transcription
-
         elif task_type == "vision" and file_bytes:
-            base64_image = base64.b64encode(file_bytes).decode('utf-8')
-            chat_completion = client.chat.completions.create(
-                messages=[{
-                    "role": "user", 
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]
-                }],
-                model="llama-3.2-11b-vision-preview", temperature=0.1,
-            )
-            return chat_completion.choices[0].message.content
-
+            b64 = base64.b64encode(file_bytes).decode('utf-8')
+            return client.chat.completions.create(
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt},{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}],
+                model="llama-3.2-11b-vision-preview", temperature=0.1
+            ).choices[0].message.content
         else:
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": prompt}
-                ],
-                model="llama-3.3-70b-versatile", temperature=0.5,
-            )
-            return chat_completion.choices[0].message.content
-
-    except Exception as e:
-        return f"❌ Erro na IA: {str(e)}"
+            return client.chat.completions.create(
+                messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile", temperature=0.5
+            ).choices[0].message.content
+    except Exception as e: return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 3. BARRA LATERAL (NAVEGAÇÃO TIPO APP)
+# 3. BARRA LATERAL
 # ==============================================================================
 with st.sidebar:
-    # 1. PERFIL (CARREIRA)
     st.markdown("""
+    <div style="display: flex; justify-content: center;">
+        <img src="https://cdn-icons-png.flaticon.com/512/4140/4140048.png" width="100" style="border-radius: 50%; border: 3px solid #3B82F6;">
+    </div>
     <div class="profile-card">
         <div class="profile-name">Arthur Carmélio</div>
         <div class="profile-role">Bacharel em Direito<br>Especialista Notarial</div>
     </div>
     """, unsafe_allow_html=True)
     
-    # 2. MENU DE NAVEGAÇÃO (DEPARTAMENTOS)
-    st.markdown("### 🧭 Navegação")
-    
-    # Usamos o Radio para simular um menu de app
+    st.markdown("### Menu Principal")
     menu_opcao = st.radio(
-        "Selecione o Departamento:",
-        [
-            "💬 Mentor Jurídico",
-            "📄 Redação de Contratos",
-            "🏢 Cartório Digital (OCR)",
-            "🎙️ Transcrição de Áudio",
-            "⚙️ Configurações"
-        ],
-        label_visibility="collapsed" # Esconde o título do radio para ficar clean
+        "Navegação:",
+        ["💬 Mentor Jurídico", "🎓 Área do Estudante", "📄 Redação de Contratos", "🏢 Cartório Digital", "🎙️ Transcrição", "⚙️ Sobre"],
+        label_visibility="collapsed"
     )
     
     st.markdown("---")
-    
-    # 3. LINKS DISCRETOS
-    c_linkedin, c_whats = st.columns(2)
-    with c_linkedin:
-        st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/arthurcarmelio/)")
-    with c_whats:
-        st.markdown("[![WhatsApp](https://img.shields.io/badge/WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/5548920039720)")
+    c1, c2 = st.columns(2)
+    with c1: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
+    with c2: st.markdown("[![WhatsApp](https://img.shields.io/badge/WhatsApp-Falar-green?logo=whatsapp)](https://wa.me/5548920039720)")
 
 # ==============================================================================
-# 4. ÁREA PRINCIPAL (INTERAÇÃO LIMPA)
+# 4. ÁREA PRINCIPAL
 # ==============================================================================
 
-# --- MÓDULO 1: MENTOR JURÍDICO (CHAT) ---
+# --- MÓDULO 1: MENTOR JURÍDICO ---
 if "Mentor" in menu_opcao:
-    st.title("💬 Mentor Jurídico")
-    st.caption("Assistente virtual para dúvidas de OAB, Concursos e Casos Práticos.")
+    st.title("💬 Mentor Jurídico IA")
+    st.caption("Tira-dúvidas jurídicas, análise de casos e jurisprudência.")
     
-    # Seletor de Personalidade
-    c_mode, _ = st.columns([1,2])
-    with c_mode:
-        modo = st.selectbox("Modo de Resposta:", ["Explicativo (Estudos)", "Policial (PCSC)", "Formal (Peças)"])
-    
-    if modo == "Explicativo (Estudos)": sys_inst = "Você é um professor de Direito. Explique de forma didática."
-    elif modo == "Policial (PCSC)": sys_inst = "Você é um mentor de carreiras policiais. Foco em Penal e Processo Penal."
-    else: sys_inst = "Você é um assistente jurídico formal. Use termos técnicos."
+    c_conf, c_chat = st.columns([1, 3])
+    with c_conf:
+        st.markdown("#### Personalidade")
+        perfil = st.selectbox("Modo:", ["Advogado Sênior", "Mentor Policial", "Tabelião"])
+        sys = "Seja formal e técnico." if "Advogado" in perfil else "Foco em Penal e Concursos." if "Policial" in perfil else "Foco em Registros Públicos."
+        if st.button("Limpar"): st.session_state.chat = []; st.rerun()
 
-    # Histórico
-    if 'chat_mentor' not in st.session_state: st.session_state.chat_mentor = []
-    
-    # Exibe chat
-    for m in st.session_state.chat_mentor:
-        avatar = "⚖️" if m['role'] == "assistant" else "👤"
-        with st.chat_message(m['role'], avatar=avatar):
-            st.write(m['content'])
-            
-    # Input
-    if p := st.chat_input("Digite sua dúvida jurídica aqui..."):
-        st.session_state.chat_mentor.append({"role":"user", "content":p})
-        st.chat_message("user", avatar="👤").write(p)
+    with c_chat:
+        if 'chat' not in st.session_state: st.session_state.chat = []
+        for m in st.session_state.chat:
+            st.chat_message(m['role'], avatar="⚖️" if m['role']=="assistant" else "👤").write(m['content'])
         
-        with st.chat_message("assistant", avatar="⚖️"):
-            with st.spinner("Consultando jurisprudência e doutrina..."):
-                r = processar_ia(p, task_type="text", system_instruction=sys_inst)
-                st.write(r)
-                st.session_state.chat_mentor.append({"role":"assistant", "content":r})
+        if p:=st.chat_input("Digite sua dúvida..."):
+            st.session_state.chat.append({"role":"user", "content":p})
+            st.chat_message("user").write(p)
+            with st.chat_message("assistant", avatar="⚖️"):
+                with st.spinner("Pesquisando..."):
+                    r = processar_ia(p, task_type="text", system_instruction=sys)
+                    st.write(r)
+                    st.session_state.chat.append({"role":"assistant", "content":r})
+            if r:
+                st.download_button("💾 Baixar Resposta", criar_docx(r), "Parecer.docx")
 
-# --- MÓDULO 2: CONTRATOS (REDAÇÃO) ---
+# --- MÓDULO 2: ÁREA DO ESTUDANTE (NOVO! FLASHCARDS & QUIZ) ---
+elif "Estudante" in menu_opcao:
+    st.title("🎓 Área do Estudante & Concurseiro")
+    st.caption("Ferramentas de Estudo Ativo para OAB e Concursos Públicos.")
+    
+    tab_flash, tab_quiz = st.tabs(["🗂️ Gerador de Flashcards", "📝 Quiz/Simulado"])
+    
+    with tab_flash:
+        st.markdown("### Crie resumos rápidos para memorização")
+        tema_flash = st.text_input("Qual o tema?", placeholder="Ex: Art. 5 da CF, Crimes contra a Vida, Usucapião...")
+        qtd_flash = st.slider("Quantidade de Cartões:", 3, 10, 5)
+        
+        if st.button("Gerar Flashcards"):
+            with st.spinner(f"Criando {qtd_flash} flashcards sobre {tema_flash}..."):
+                prompt = f"Crie {qtd_flash} Flashcards de estudo sobre '{tema_flash}'. Formato: PERGUNTA (em negrito) e RESPOSTA (curta e direta). Use emojis."
+                res_flash = processar_ia(prompt, task_type="text", system_instruction="Você é um professor focado em memorização.")
+                st.markdown(res_flash)
+                st.download_button("💾 Baixar Flashcards", criar_docx(res_flash), "Flashcards.docx")
+                
+    with tab_quiz:
+        st.markdown("### Teste seus conhecimentos")
+        tema_quiz = st.text_input("Matéria do Simulado:", placeholder="Ex: Direito Administrativo - Atos Administrativos")
+        dificuldade = st.select_slider("Dificuldade:", ["Fácil", "Médio", "Difícil (FGV/Cebraspe)"])
+        
+        if st.button("Gerar Simulado"):
+            with st.spinner("Elaborando questões..."):
+                prompt = f"Crie um simulado com 3 questões de múltipla escolha sobre '{tema_quiz}'. Nível: {dificuldade}. No final, coloque o GABARITO COMENTADO."
+                res_quiz = processar_ia(prompt, task_type="text", system_instruction="Você é um examinador de banca de concurso.")
+                st.info("Responda mentalmente antes de ver o gabarito no final!")
+                st.write(res_quiz)
+                st.download_button("💾 Baixar Simulado", criar_docx(res_quiz), "Simulado.docx")
+
+# --- MÓDULO 3: CONTRATOS ---
 elif "Contratos" in menu_opcao:
     st.title("📄 Redação de Contratos")
-    st.caption("Gerador de minutas baseado no seu modelo personalizado (ABNT).")
-    
-    col_main, col_form = st.columns([1, 2])
-    
-    with col_main:
-        st.info("💡 **Dica:** O sistema utiliza o padrão 'Darlene/Manoel' para formatação de cláusulas.")
-        tipo = st.selectbox("Tipo de Contrato:", ["Aluguel Residencial", "Aluguel Comercial", "Compra e Venda", "Prestação de Serviços"])
-        
-        if st.button("🚀 Gerar Minuta", use_container_width=True):
-            # Validação simples
-            if not st.session_state.get('part_a') or not st.session_state.get('val'):
-                st.toast("⚠️ Preencha pelo menos as Partes e o Valor.", icon="⚠️")
-            else:
-                with st.spinner("Redigindo cláusulas..."):
-                    a = st.session_state.get('part_a')
-                    b = st.session_state.get('part_b')
-                    obj = st.session_state.get('obj')
-                    val = st.session_state.get('val')
-                    prazo = st.session_state.get('prazo')
-                    ex = st.session_state.get('ex')
-                    
-                    template_base = """
-                    ESTRUTURA PADRÃO OBRIGATÓRIA:
-                    1. CABEÇALHO EM CAIXA ALTA.
-                    2. QUALIFICAÇÃO COMPLETA.
-                    3. CLÁUSULAS: Objeto, Prazo, Valor, Reajuste, Destinação, Conservação, Vistoria, Foro.
-                    4. LOCAL, DATA E ASSINATURAS.
-                    """
-                    prompt = f"Atue como Tabelião. Redija um {tipo} seguindo: {template_base}. DADOS: LOCADOR: {a}, LOCATÁRIO: {b}, OBJETO: {obj}, VALOR: {val}, PRAZO: {prazo}, EXTRAS: {ex}."
-                    
-                    r = processar_ia(prompt, task_type="text")
-                    st.session_state['resultado_contrato'] = r # Salva para não sumir
+    t = st.selectbox("Tipo:", ["Aluguel Residencial", "Comercial", "Compra e Venda", "Serviços"])
+    c1, c2 = st.columns(2)
+    a = c1.text_input("Contratante", placeholder="Nome, CPF...")
+    b = c2.text_input("Contratado", placeholder="Nome, CPF...")
+    val = c1.text_input("Valor", placeholder="R$...")
+    obj = c2.text_input("Objeto", placeholder="Descrição...")
+    if st.button("🚀 Gerar Minuta"):
+        if a and val:
+            with st.spinner("Redigindo..."):
+                # Template Darlene/Manoel simplificado para o prompt
+                prompt = f"Atue como Tabelião. Redija um {t} completo (ABNT). LOCADOR: {a}, LOCATÁRIO: {b}, VALOR: {val}, OBJETO: {obj}. Inclua cláusulas de praxe, foro e multa."
+                r = processar_ia(prompt, task_type="text")
+                st.session_state['cont'] = r
+    if 'cont' in st.session_state:
+        st.write(st.session_state['cont'])
+        st.download_button("💾 Baixar DOCX", criar_docx(st.session_state['cont']), "Contrato.docx")
 
-    with col_form:
-        st.markdown("#### 📝 Dados do Contrato")
-        c1, c2 = st.columns(2)
-        st.session_state['part_a'] = c1.text_input("Parte A (Contratante)", placeholder="Nome, CPF, Endereço")
-        st.session_state['part_b'] = c2.text_input("Parte B (Contratado)", placeholder="Nome, CPF, Endereço")
-        st.session_state['obj'] = c1.text_area("Objeto", placeholder="Descrição do Imóvel ou Serviço")
-        st.session_state['val'] = c2.text_area("Valor e Pagamento", placeholder="R$ 1.500,00 dia 10...")
-        st.session_state['prazo'] = c1.text_input("Prazo", placeholder="12 meses")
-        st.session_state['ex'] = c2.text_input("Extras", placeholder="Cláusulas especiais")
-
-    # Área de Resultado (Aparece embaixo)
-    if 'resultado_contrato' in st.session_state:
-        st.markdown("---")
-        st.subheader("Minuta Gerada")
-        st.write(st.session_state['resultado_contrato'])
-        docx = criar_docx(st.session_state['resultado_contrato'])
-        if docx: st.download_button("💾 Baixar DOCX Editável", docx, f"Minuta_{tipo}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-# --- MÓDULO 3: CARTÓRIO (OCR) ---
+# --- MÓDULO 4: CARTÓRIO ---
 elif "Cartório" in menu_opcao:
     st.title("🏢 Cartório Digital (OCR)")
-    st.caption("Transforme fotos de documentos físicos em texto editável.")
-    
-    col_upload, col_result = st.columns(2)
-    
-    with col_upload:
-        st.markdown("#### 1. Envie o Documento")
-        u = st.file_uploader("Arraste uma foto ou PDF", type=["jpg","png","jpeg","pdf"])
-        if u and st.button("🔍 Extrair Texto", use_container_width=True):
-            with st.spinner("A IA está lendo o documento..."):
-                r = processar_ia("Transcreva este documento fielmente. Mantenha a formatação.", file_bytes=u.getvalue(), task_type="vision")
-                st.session_state['ocr_result'] = r
-                
-    with col_result:
-        st.markdown("#### 2. Resultado")
-        if 'ocr_result' in st.session_state:
-            st.text_area("Texto Extraído", st.session_state['ocr_result'], height=400)
-            d = criar_docx(st.session_state['ocr_result'])
-            if d: st.download_button("💾 Baixar DOCX", d, "Documento_Extraido.docx", use_container_width=True)
-        else:
-            st.info("O texto extraído aparecerá aqui.")
+    u = st.file_uploader("Documento", type=["jpg","pdf"])
+    if u and st.button("Extrair"):
+        with st.spinner("Lendo..."):
+            r = processar_ia("Transcreva este documento.", file_bytes=u.getvalue(), task_type="vision")
+            st.text_area("Texto", r, height=400)
+            st.download_button("💾 Baixar DOCX", criar_docx(r), "Doc.docx")
 
-# --- MÓDULO 4: TRANSCRIÇÃO ---
+# --- MÓDULO 5: TRANSCRIÇÃO ---
 elif "Transcrição" in menu_opcao:
-    st.title("🎙️ Transcrição de Áudio")
-    st.caption("Converta áudios de WhatsApp ou gravações em texto.")
-    
-    tab_rec, tab_up = st.tabs(["🔴 Gravar Agora", "📂 Upload de Arquivo"])
-    audio_data = None
-    
-    with tab_rec:
-        audio_rec = st.audio_input("Clique para gravar")
-        if audio_rec: audio_data = audio_rec.getvalue()
-            
-    with tab_up:
-        audio_file = st.file_uploader("Arquivo de Áudio", type=["mp3","wav","m4a","ogg"])
-        if audio_file: audio_data = audio_file.getvalue()
-            
-    if audio_data and st.button("⚡ Transcrever", use_container_width=True):
-        with st.spinner("Processando áudio..."):
-            r = processar_ia("", file_bytes=audio_data, task_type="audio")
-            st.success("Concluído!")
+    st.title("🎙️ Transcrição")
+    u = st.audio_input("Gravar")
+    if u and st.button("Transcrever"):
+        with st.spinner("Ouvindo..."):
+            r = processar_ia("", file_bytes=u.getvalue(), task_type="audio")
             st.write(r)
-            d = criar_docx(r)
-            if d: st.download_button("💾 Baixar Transcrição", d, "Transcricao.docx")
+            st.download_button("💾 Baixar", criar_docx(r), "Audio.docx")
 
-# --- MÓDULO 5: CONFIGURAÇÕES ---
-elif "Configurações" in menu_opcao:
-    st.title("⚙️ Configurações")
-    st.markdown("---")
+# --- MÓDULO 6: SOBRE (SEO) ---
+elif "Sobre" in menu_opcao:
+    st.title("Sobre o Carmélio AI")
+    st.markdown("""
+    ### O Futuro da Advocacia e dos Serviços Notariais
     
-    st.subheader("Privacidade & Dados")
-    lgpd = st.toggle("Modo Anonimização (LGPD)", value=False, help="Substitui nomes reais por [NOME] nas saídas da IA.")
-    if lgpd: st.success("🔒 Modo de Privacidade Ativo")
+    O **Carmélio AI** é uma ferramenta desenvolvida para auxiliar estudantes de direito, advogados e serventuários da justiça.
     
-    st.subheader("Sobre o Sistema")
-    st.info("""
-    **Carmélio AI Suite v2.0**
+    **Funcionalidades:**
+    * 🤖 Inteligência Artificial Jurídica (Llama 3 / Groq)
+    * 📄 Gerador de Contratos e Peças Processuais
+    * 🎓 Assistente de Estudos para OAB e Concursos
+    * 🏢 Leitura de Documentos Antigos (OCR)
     
-    Engine: **Groq (Llama 3)**
-    Velocidade: **Ultra-Fast**
-    Desenvolvido por: **Arthur Carmélio**
+    **Desenvolvedor:**
+    Arthur Carmélio - Bacharel em Direito e Especialista Notarial.
+    """)
+    
+    # PALAVRAS-CHAVE PARA O GOOGLE (SEO VISÍVEL)
+    st.divider()
+    st.caption("""
+    **Tags de Busca:** Assistente Jurídico Virtual, Inteligência Artificial para Advogados, Gerador de Contratos Grátis, 
+    Modelo de Contrato de Aluguel, Estudar para OAB com IA, Resumo de Jurisprudence, Cartório Digital, 
+    Transcrição de Audiência, Arthur Carmélio, Direito Notarial e Registral.
     """)
