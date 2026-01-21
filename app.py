@@ -8,6 +8,9 @@ import os
 # ==============================================================================
 st.set_page_config(page_title="Carmélio AI Studio", page_icon="⚖️", layout="wide")
 
+# 👇👇👇 LINHA 12: COLE SUA CHAVE NOVA AQUI DENTRO DAS ASPAS 👇👇👇
+CHAVE_FIXA = "AIzaSyCwu8EgBD7Xu3gcZHrwILA_2nyUW1ic0us"
+
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; }
@@ -17,29 +20,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. SISTEMA DE CHAVE INTELIGENTE (COFRE OU MANUAL)
+# 2. INTELIGÊNCIA (GEMINI)
 # ==============================================================================
-def get_api_key():
-    # Tenta pegar do Cofre (Secrets) para não precisar digitar
-    try:
-        return st.secrets["AIzaSyCwu8EgBD7Xu3gcZHrwILA_2nyUW1ic0us"]
-    except:
-        # Se não tiver no cofre, pede na barra lateral (Fallback)
-        return None
-
-# ==============================================================================
-# 3. CÉREBRO GEMINI (ANTI-ERRO 404)
-# ==============================================================================
-def get_gemini_response(api_key, prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
-    genai.configure(api_key=api_key)
+def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
+    # Verifica se a chave foi colada
+    if "COLE_SUA" in CHAVE_FIXA:
+        return "⚠️ ERRO: Você esqueceu de colar a chave na Linha 12 do código!"
+        
+    genai.configure(api_key=CHAVE_FIXA)
     
     personas = {
         "padrao": "Você é um assistente jurídico útil.",
-        "oab": "ATUE COMO: Examinador OAB. Exija fundamentação (Art. 840 CLT, Súmulas).",
-        "pcsc": "ATUE COMO: Mentor PCSC. Foque em Processo Penal e pegadinhas da banca."
+        "oab": "ATUE COMO: Examinador OAB (Trabalho). Exija fundamentação (Art. 840 CLT).",
+        "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito e pegadinhas."
     }
     
-    # Tenta modelos em ordem (Do mais novo para o mais antigo)
+    # Tenta conectar em ordem de inteligência
     models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
     
     final_prompt = [prompt]
@@ -48,38 +44,30 @@ def get_gemini_response(api_key, prompt, context_text="", image_data=None, mime_
 
     for model_name in models:
         try:
-            if model_name == "gemini-pro" and image_data: continue # Modelo antigo não lê imagem
-            
+            if model_name == "gemini-pro" and image_data: continue
             instruction = personas[mode] if model_name != "gemini-pro" else None
             model = genai.GenerativeModel(model_name, system_instruction=instruction)
             
-            # Ajuste para modelo antigo que não aceita instrução no sistema
-            if model_name == "gemini-pro":
-                final_prompt[0] = f"PERSONA: {personas[mode]}\n\n{prompt}"
+            # Compatibilidade com modelo antigo
+            if model_name == "gemini-pro": final_prompt[0] = f"PERSONA: {personas[mode]}\n\n{prompt}"
                 
             return model.generate_content(final_prompt).text
         except:
             continue
             
-    return "❌ Erro: Chave inválida ou API instável. Verifique se criou uma chave nova."
+    return "❌ Erro: Chave inválida ou bloqueada pelo Google. Gere uma nova."
 
 # ==============================================================================
-# 4. INTERFACE
+# 3. INTERFACE
 # ==============================================================================
 st.title("⚖️ Carmélio AI Studio")
 
-# Pega a chave
-chave_secreta = get_api_key()
-
 with st.sidebar:
-    if chave_secreta:
-        st.success("🔐 Chave Autenticada pelo Cofre")
-        api_key = chave_secreta
+    if "AIza" in CHAVE_FIXA:
+        st.success("🔐 Chave Conectada (Linha 12)")
     else:
-        st.warning("⚠️ Chave não encontrada no Cofre")
-        api_key = st.text_input("Cole sua chave aqui provisoriamente:", type="password")
-    
-    st.divider()
+        st.error("⚠️ Sem Chave (Edite a Linha 12)")
+        
     mode = st.radio("Modo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
     mode_map = {"🤖 Geral": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
     
@@ -87,33 +75,31 @@ with st.sidebar:
         st.session_state['chat'] = []
         st.rerun()
 
-# Só mostra o app se tiver chave
-if api_key:
-    tab1, tab2 = st.tabs(["💬 Chat", "📄 Arquivos"])
+# Abas
+tab1, tab2 = st.tabs(["💬 Chat", "📄 Arquivos"])
 
-    with tab1:
-        if 'chat' not in st.session_state: st.session_state['chat'] = []
-        for msg in st.session_state['chat']:
-            with st.chat_message(msg['role'], avatar="👤" if msg['role'] == "user" else "🤖"):
-                st.markdown(msg['content'])
-        
-        if prompt := st.chat_input("Digite..."):
-            st.session_state['chat'].append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.markdown(prompt)
-            with st.chat_message("assistant"):
-                with st.spinner("Pensando..."):
-                    resp = get_gemini_response(api_key, prompt, mode=mode_map[mode])
-                    st.markdown(resp)
-                    st.session_state['chat'].append({"role": "assistant", "content": resp})
+# Chat
+with tab1:
+    if 'chat' not in st.session_state: st.session_state['chat'] = []
+    for msg in st.session_state['chat']:
+        with st.chat_message(msg['role'], avatar="👤" if msg['role'] == "user" else "🤖"):
+            st.markdown(msg['content'])
+            
+    if prompt := st.chat_input("Digite sua dúvida..."):
+        st.session_state['chat'].append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                resp = get_gemini_response(prompt, mode=mode_map[mode])
+                st.markdown(resp)
+                st.session_state['chat'].append({"role": "assistant", "content": resp})
 
-    with tab2:
-        uploaded = st.file_uploader("Upload", type=["pdf", "jpg", "png"])
-        if uploaded and st.button("Analisar"):
-            with st.spinner("Lendo..."):
-                bytes_data = uploaded.getvalue()
-                mime = uploaded.type
-                resp = get_gemini_response(api_key, "Descreva e analise este documento.", image_data=bytes_data, mime_type=mime)
-                st.write(resp)
-else:
-    st.info("👈 Configure sua chave no menu 'Manage App > Settings > Secrets' para não precisar digitar sempre.")
-
+# Arquivos
+with tab2:
+    uploaded = st.file_uploader("Upload PDF/Foto", type=["pdf", "jpg", "png"])
+    if uploaded and st.button("Analisar"):
+        with st.spinner("Lendo..."):
+            bytes_data = uploaded.getvalue()
+            mime = uploaded.type
+            resp = get_gemini_response("Analise este documento.", image_data=bytes_data, mime_type=mime)
+            st.write(resp)
