@@ -9,42 +9,36 @@ import time
 import re
 import os
 
-# =============================================================================
-# 0. DEPENDÊNCIAS OPCIONAIS (PARA NÃO QUEBRAR NO DEPLOY)
-# =============================================================================
+# Dependências opcionais
 try:
     import pdfplumber
     PDFPLUMBER_AVAILABLE = True
-except ImportError:
+except Exception:
     PDFPLUMBER_AVAILABLE = False
 
 try:
     import docx as docx_reader
     DOCX_READER_AVAILABLE = True
-except ImportError:
+except Exception:
     DOCX_READER_AVAILABLE = False
 
-# =============================================================================
-# 1. CONFIGURAÇÃO E DESIGN
-# =============================================================================
-st.set_page_config(
-    page_title="Carmélio AI | Suíte Jurídica Pro",
-    page_icon="logo.jpg.png",
-    layout="wide"
-)
+try:
+    from PIL import Image, ImageFilter, ImageOps
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
 
+# =============================================================================
+# 1. Configuração e design
+# =============================================================================
+st.set_page_config(page_title="Carmélio AI | Suíte Jurídica Pro", page_icon="logo.jpg.png", layout="wide")
 st.markdown("""
 <style>
-    /* GERAL */
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
-    
-    /* CARDS */
     .question-card { background-color: #1F2430; padding: 20px; border-radius: 12px; border-left: 5px solid #3B82F6; margin-bottom: 15px; }
     .flashcard { background: linear-gradient(135deg, #1F2430 0%, #282C34 100%); padding: 24px; border-radius: 12px; border: 1px solid #3B82F6; text-align: center; }
     .xp-badge { background-color: #FFD700; color: #000; padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 12px; }
-    
-    /* INPUTS & BUTTONS */
     .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
         background-color: #161922; border: 1px solid #2B2F3B; color: #E0E7FF; border-radius: 8px;
     }
@@ -54,29 +48,30 @@ st.markdown("""
         color: white; transition: 0.3s;
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4); color: white;}
-    
-    /* TEXTO & PERFIL */
     h1, h2, h3 { color: #F3F4F6; font-family: 'Inter', sans-serif; }
     p, label, .stMarkdown { color: #9CA3AF; }
     .profile-box { text-align: center; margin-bottom: 20px; color: #E0E7FF; }
     .profile-name { font-weight: bold; font-size: 18px; margin-top: 5px; color: #FFFFFF; }
     .profile-role { font-size: 12px; color: #3B82F6; text-transform: uppercase; letter-spacing: 1px; }
+    .timer-display { font-size: 72px; font-weight: bold; color: #FFFFFF; text-align: center; margin: 10px 0; }
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 2. SISTEMA DE GAMIFICAÇÃO & ESTADO
+# 2. Estado, gamificação, LGPD e rate limiting
 # =============================================================================
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "user_level" not in st.session_state: st.session_state.user_level = 1
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
 if "edital_topics" not in st.session_state: st.session_state.edital_topics = []
 if "generated_questions" not in st.session_state: st.session_state.generated_questions = []
+if "question_stats" not in st.session_state: st.session_state.question_stats = {}
+if "cards" not in st.session_state: st.session_state.cards = []
 if "logs" not in st.session_state: st.session_state.logs = []
 if "lgpd_ack" not in st.session_state: st.session_state.lgpd_ack = False
 if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call = 0.0
 
-RATE_LIMIT_SECONDS = 15  # Reduzi um pouco para ficar mais fluido
+RATE_LIMIT_SECONDS = 15
 
 def add_xp(amount):
     st.session_state.user_xp += amount
@@ -106,8 +101,22 @@ def add_log(task_type, model, latency_ms, token_usage, status):
         "timestamp": datetime.now().isoformat()
     })
 
+# LGPD
+if not st.session_state.lgpd_ack:
+    with st.expander("🔐 LGPD e Tratamento de Dados (Clique para ler)", expanded=True):
+        st.markdown("""
+        **Termos de Uso do Carmélio AI:**
+        - Este sistema utiliza Inteligência Artificial para processar textos, imagens e áudios.
+        - Seus dados são processados pela Groq API e não são retidos permanentemente.
+        - Ao continuar, você concorda com o processamento para fins de estudo e produtividade.
+        """)
+        if st.button("Concordo e quero entrar"):
+            st.session_state.lgpd_ack = True
+            st.rerun()
+    st.stop()
+
 # =============================================================================
-# 3. BACKEND ROBUSTO (API GROQ REAL)
+# 3. Backend (Groq)
 # =============================================================================
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -174,6 +183,9 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
         add_log(task_type, model_override or "auto", int((time.time()-start)*1000), len(prompt) if prompt else 0, f"error: {e}")
         return f"❌ Erro na IA: {str(e)}"
 
+# =============================================================================
+# 4. Utilitários de validação e extração
+# =============================================================================
 def validate_json_response(response_text):
     try:
         match = re.search(r"\{.*\}", response_text, re.DOTALL)
@@ -192,37 +204,21 @@ def validate_question_json(data):
         assert set(data.keys()) == {"enunciado", "alternativas", "gabarito", "comentario"}
         assert all(k in data["alternativas"] for k in ["A", "B", "C", "D", "E"])
         assert data["gabarito"] in ["A", "B", "C", "D", "E"]
+        assert data["alternativas"][data["gabarito"]].strip() != ""
+        has_citation = any(tag in data["comentario"] for tag in ["art.", "Lei", "Súmula", "Tema", "STF", "STJ"])
+        assert has_citation
         return True, ""
     except AssertionError:
-        return False, "Formato inválido. Campos obrigatórios ausentes ou incorretos."
+        return False, "Formato inválido ou sem citações mínimas."
 
 def extract_json_from_text(text):
     m = re.search(r"\{.*\}", text, flags=re.S)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except Exception:
-        return None
+    if not m: return None
+    try: return json.loads(m.group(0))
+    except Exception: return None
 
 # =============================================================================
-# 4. LGPD E CONSENTIMENTO
-# =============================================================================
-if not st.session_state.lgpd_ack:
-    with st.expander("🔐 LGPD e Tratamento de Dados (Clique para ler)", expanded=True):
-        st.markdown("""
-        **Termos de Uso do Carmélio AI:**
-        - Este sistema utiliza Inteligência Artificial para processar textos e imagens.
-        - Seus dados (uploads e perguntas) são processados pela Groq API e não são retidos permanentemente pelo desenvolvedor.
-        - Ao continuar, você concorda com o processamento para fins de estudo e produtividade jurídica.
-        """)
-        if st.button("Concordo e quero entrar"):
-            st.session_state.lgpd_ack = True
-            st.rerun()
-    st.stop()
-
-# =============================================================================
-# 5. BARRA LATERAL
+# 5. Sidebar
 # =============================================================================
 with st.sidebar:
     try:
@@ -233,7 +229,7 @@ with st.sidebar:
     <div class="profile-box">
         <small>Desenvolvido por</small><br>
         <div class="profile-name">Arthur Carmélio</div>
-        <div class="profile-role">Especialista Notarial & Dev</div>
+        <div class="profile-role">ESPECIALISTA NOTARIAL</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -248,11 +244,6 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    with st.expander("🍅 Pomodoro Timer"):
-        tempo = st.slider("Minutos", 15, 60, 25)
-        if st.button("Iniciar Foco"):
-            st.toast(f"Foco de {tempo} minutos iniciado!")
-
     st.markdown("---")
     col_link, col_zap = st.columns(2)
     with col_link:
@@ -261,18 +252,38 @@ with st.sidebar:
         st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720?text=Suporte%20Carmelio%20AI)")
 
 # =============================================================================
-# 6. LISTAS GLOBAIS
+# 6. Listas globais (jurídico, policial, auditoria) + bancas + UFs
 # =============================================================================
 DISCIPLINAS = [
+    # Jurídico
     "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Civil",
     "Processo Penal", "Processo Civil", "Direito Tributário", "Direito do Trabalho",
-    "Notarial e Registral", "Português", "RLM", "Informática"
+    "Processo do Trabalho", "Direito Empresarial", "Direitos Humanos", "Direito Ambiental",
+    "Direito Internacional", "Notarial e Registral", "Ética Profissional", "Português",
+    "RLM", "Informática",
+    # Policial
+    "Direito Penal Militar", "Processo Penal Militar", "Criminologia", "Legislação Penal Especial",
+    "Investigação Criminal", "Segurança Pública", "Inteligência Policial",
+    "Direitos Humanos aplicados à Segurança",
+    # Auditoria/Controle
+    "Contabilidade Geral", "Contabilidade Pública", "Auditoria Governamental",
+    "Administração Pública", "Controle Interno", "Finanças Públicas",
+    "Direito Financeiro", "Gestão de Riscos", "Normas de Auditoria"
 ]
-BANCAS = ["FGV", "Cebraspe", "Vunesp", "FCC", "AOCP", "Comperve", "IBFC", "Quadrix"]
-UFS = ["SC", "SP", "RJ", "MG", "RS", "PR", "BA", "PE", "CE", "DF", "Federal"]
+
+BANCAS = [
+    "FGV", "Cebraspe", "Vunesp", "FCC", "AOCP", "Comperve", "IBFC", "Quadrix",
+    "Cesgranrio", "Idecan", "Iades", "Funrio", "Fundatec", "Fepese", "Instituto Consulplan"
+]
+
+UFS = [
+    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA",
+    "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN",
+    "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Federal"
+]
 
 # =============================================================================
-# 7. MÓDULOS
+# 7. Módulos
 # =============================================================================
 
 # --- ESTUDANTE PRO ---
@@ -293,18 +304,26 @@ if menu_opcao == "🎓 Área do Estudante":
 
         if st.button("Gerar Questão"):
             with st.spinner("Elaborando questão..."):
+                nivel_instr = {
+                    "Fácil": "Use linguagem simples, conceito básico e alternativa correta evidente.",
+                    "Médio": "Exija interpretação e aplicação prática moderada, com alternativas plausíveis.",
+                    "Difícil": "Inclua nuances, jurisprudência e pegadinhas típicas da banca."
+                }[nivel]
                 prompt = (
                     "Gere 1 questão inédita em JSON com campos: enunciado, alternativas (A,B,C,D,E), gabarito (A–E), comentario. "
                     f"Disciplina: {disc}. Assunto: {assunto}. Banca: {banca}. Cargo: {cargo}. Jurisdição: {uf}. "
-                    f"Nível: {nivel}. Cite artigos/leis. Retorne APENAS JSON."
+                    f"Nível: {nivel}. {nivel_instr} "
+                    "Cite artigos, súmulas ou precedentes (STF/STJ). Retorne APENAS JSON."
                 )
-                res = processar_ia(prompt, task_type="text", temperature=0.3)
+                res = processar_ia(prompt, task_type="text", temperature=0.2)
                 data = validate_json_response(res)
                 if data:
                     ok, msg = validate_question_json(data)
                     if ok:
                         st.session_state.q_atual = data
                         st.session_state.ver_resp = False
+                        st.session_state.question_stats.setdefault(disc, {"count": 0, "sim_acertos": 0})
+                        st.session_state.question_stats[disc]["count"] += 1
                         add_xp(10)
                     else:
                         st.error(f"Erro validação: {msg}")
@@ -313,15 +332,26 @@ if menu_opcao == "🎓 Área do Estudante":
 
         if 'q_atual' in st.session_state:
             q = st.session_state.q_atual
-            st.markdown(f"<div class='question-card'><h4>{disc} | {banca}</h4><p>{q['enunciado']}</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='question-card'><h4>{disc} | {banca} | {uf} | {nivel}</h4><p>{q['enunciado']}</p></div>", unsafe_allow_html=True)
             for k in ["A","B","C","D","E"]: st.write(f"**{k})** {q['alternativas'].get(k, '')}")
-            
             if st.button("👁️ Ver Gabarito"): st.session_state.ver_resp = True
             if st.session_state.get('ver_resp'):
                 st.success(f"Gabarito: {q['gabarito']}")
                 st.info(f"Comentário: {q['comentario']}")
-                if criar_docx(json.dumps(q, indent=2), "Questão"):
-                    st.download_button("💾 Baixar DOCX", criar_docx(json.dumps(q, indent=2), "Questão"), "Questao.docx")
+                st.session_state.generated_questions.append(q)
+                if criar_docx(json.dumps(q, ensure_ascii=False, indent=2), "Questão"):
+                    st.download_button("💾 Baixar DOCX", criar_docx(json.dumps(q, ensure_ascii=False, indent=2), "Questão"), "Questao.docx")
+
+        st.markdown("---")
+        st.markdown("### 📦 Histórico e estatísticas")
+        if st.session_state.generated_questions:
+            st.write(f"Total: {len(st.session_state.generated_questions)} questões")
+            for disc_name, stats in st.session_state.question_stats.items():
+                st.write(f"- {disc_name}: {stats['count']} geradas")
+            if criar_docx(json.dumps(st.session_state.generated_questions, ensure_ascii=False, indent=2), "Histórico de Questões"):
+                st.download_button("💾 Baixar histórico (DOCX)", criar_docx(json.dumps(st.session_state.generated_questions, ensure_ascii=False, indent=2), "Histórico de Questões"), "Questoes_Historico.docx")
+        else:
+            st.info("Nenhuma questão gerada ainda.")
 
     # 1.2 MESTRE DOS EDITAIS
     with tab_edital:
@@ -332,60 +362,169 @@ if menu_opcao == "🎓 Área do Estudante":
         with col_txt:
             texto_manual = st.text_area("Ou cole o texto aqui:", height=150)
 
-        # Funções auxiliares de leitura
-        def extract_text(f):
-            if f.type == "application/pdf":
-                if PDFPLUMBER_AVAILABLE:
-                    import pdfplumber
-                    with pdfplumber.open(BytesIO(f.getvalue())) as pdf:
-                        return "".join([p.extract_text() or "" for p in pdf.pages])
-                return "Erro: pdfplumber não instalado."
-            elif "word" in f.type:
-                if DOCX_READER_AVAILABLE:
-                    import docx
-                    doc = docx.Document(BytesIO(f.getvalue()))
-                    return "\n".join([p.text for p in doc.paragraphs])
-                return "Erro: python-docx não instalado."
-            else:
-                return f.getvalue().decode("utf-8", errors="ignore")
+        def extract_text_from_pdf(file_bytes):
+            if not PDFPLUMBER_AVAILABLE:
+                return None, "pdfplumber não instalado."
+            try:
+                text = ""
+                with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                    for page in pdf.pages:
+                        text += page.extract_text() or ""
+                return text, None
+            except Exception as e:
+                return None, f"Erro ao ler PDF: {e}"
+
+        def extract_text_from_docx(file_bytes):
+            if not DOCX_READER_AVAILABLE:
+                return None, "python-docx não instalado."
+            try:
+                f = BytesIO(file_bytes)
+                doc = docx_reader.Document(f)
+                text = "\n".join([p.text for p in doc.paragraphs])
+                return text, None
+            except Exception as e:
+                return None, f"Erro ao ler DOCX: {e}"
+
+        def verticalize_edital(text):
+            prompt = (
+                "Extraia e liste os tópicos do edital abaixo, organizando por matéria e subtemas. "
+                "Retorne em JSON com campos: 'materia', 'topicos' (lista de strings). "
+                "Edital:\n" + text
+            )
+            r = processar_ia(prompt, task_type="text", system_instruction="Estruture em JSON válido.", temperature=0.1)
+            data = extract_json_from_text(r)
+            if not data:
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                materias = {}
+                current = "Geral"
+                for ln in lines:
+                    if ln.isupper() and len(ln) > 3:
+                        current = ln
+                        materias[current] = []
+                    else:
+                        materias.setdefault(current, []).append(ln)
+                return [{"materia": m, "topicos": t} for m, t in materias.items()]
+            if isinstance(data, dict) and "materias" in data and isinstance(data["materias"], list):
+                return data["materias"]
+            if isinstance(data, list):
+                return data
+            return [{"materia": "Geral", "topicos": [text[:200] + "..."]}]
 
         if st.button("📊 Verticalizar Edital"):
             text_to_process = ""
-            if file: text_to_process = extract_text(file)
-            elif texto_manual: text_to_process = texto_manual
-            
-            if len(text_to_process) > 50:
+            err = None
+            if file:
+                if file.type == "application/pdf":
+                    text_to_process, err = extract_text_from_pdf(file.getvalue())
+                    if not text_to_process or len(text_to_process.strip()) < 50:
+                        st.info("PDF pode estar escaneado. Tentando OCR via IA...")
+                        text_to_process = processar_ia("Transcreva fielmente este PDF escaneado.", file_bytes=file.getvalue(), task_type="vision")
+                elif "word" in file.type or file.type == "application/octet-stream":
+                    text_to_process, err = extract_text_from_docx(file.getvalue())
+                else:
+                    try:
+                        text_to_process = file.getvalue().decode("utf-8", errors="ignore")
+                    except Exception as e:
+                        err = f"Erro ao ler TXT: {e}"
+            elif texto_manual:
+                text_to_process = texto_manual
+
+            if err:
+                st.error(err)
+            elif len(text_to_process) > 50:
                 st.session_state.edital_text = text_to_process
                 with st.spinner("Analisando edital..."):
-                    prompt = f"Analise este edital e extraia os tópicos por matéria. Retorne uma lista organizada. Texto: {text_to_process[:4000]}..." # Limite para não estourar tokens
-                    r = processar_ia(prompt, temperature=0.1)
-                    st.markdown(r)
-                    if criar_docx(r): st.download_button("💾 Baixar Verticalizado", criar_docx(r), "Edital_Vertical.docx")
+                    topics = verticalize_edital(text_to_process)
+                    st.session_state.edital_topics = topics
+                    st.success(f"Tópicos extraídos: {len(topics)} matérias.")
+                    for item in topics[:10]:
+                        st.markdown(f"- **{item['materia']}**: {min(len(item['topicos']), 5)} tópicos")
+                    if criar_docx(json.dumps(topics, ensure_ascii=False, indent=2), "Edital Verticalizado"):
+                        st.download_button("💾 Baixar tópicos (DOCX)", criar_docx(json.dumps(topics, ensure_ascii=False, indent=2), "Edital Verticalizado"), "Edital_Verticalizado.docx")
                     add_xp(20)
             else:
                 st.warning("Texto muito curto ou inválido.")
 
+        st.markdown("---")
+        st.markdown("### 🧪 Treinamento por tópico")
+        if st.session_state.edital_topics:
+            materias = [t["materia"] for t in st.session_state.edital_topics]
+            sel_materia = st.selectbox("Matéria", materias)
+            sel_topicos = []
+            for t in st.session_state.edital_topics:
+                if t["materia"] == sel_materia:
+                    sel_topicos = t["topicos"]
+                    break
+            topico = st.selectbox("Tópico", sel_topicos if sel_topicos else ["—"])
+            c1, c2, c3, c4 = st.columns(4)
+            banca_t = c1.selectbox("Banca", BANCAS)
+            uf_t = c2.selectbox("UF/Tribunal", UFS)
+            cargo_t = c3.text_input("Cargo", "Analista")
+            nivel_t = c4.selectbox("Nível", ["Fácil", "Médio", "Difícil"])
+            if st.button("Gerar questão do tópico"):
+                prompt = (
+                    "Gere 1 questão inédita em JSON com campos: enunciado, alternativas (A,B,C,D,E), gabarito, comentario. "
+                    f"Matéria: {sel_materia}. Tópico: {topico}. Banca: {banca_t}. UF: {uf_t}. Cargo: {cargo_t}. Nível: {nivel_t}. "
+                    "Cite artigos/súmulas/precedentes. Retorne APENAS JSON."
+                )
+                r = processar_ia(prompt, task_type="text", temperature=0.2)
+                data = validate_json_response(r)
+                if data:
+                    ok, msg = validate_question_json(data)
+                    if ok:
+                        st.success("Questão gerada.")
+                        st.json(data)
+                        st.session_state.generated_questions.append(data)
+                        add_xp(15)
+                    else:
+                        st.error(f"Validação falhou: {msg}")
+                else:
+                    st.error("Falha ao gerar JSON válido.")
+
     # 1.3 FLASHCARDS
     with tab_flash:
-        st.markdown("### ⚡ Flashcards")
+        st.markdown("### ⚡ Flashcards & Repetição espaçada")
+        deck_disc = st.selectbox("Deck (Disciplina)", DISCIPLINAS)
         tema = st.text_input("Tema para memorizar")
         if st.button("Criar Flashcard"):
             r = processar_ia(f"Crie um flashcard sobre {tema}. Retorne: PERGUNTA --- RESPOSTA")
             if "---" in r:
-                f, b = r.split("---", 1)
-                st.session_state.cards = st.session_state.get("cards", []) + [(f.strip(), b.strip())]
+                f, b = r.split("---")
+                card = {"deck": deck_disc, "front": f.strip(), "back": b.strip(), "ease": 2.5, "interval": 1, "due": datetime.today().strftime("%Y-%m-%d")}
+                st.session_state.cards.append(card)
                 st.success("Criado!")
                 add_xp(5)
-            else: st.error("Erro formato.")
-            
-        if st.session_state.get("cards"):
-            st.write(f"Total: {len(st.session_state.cards)}")
-            csv = "front,back\n" + "\n".join([f"{f},{b}" for f,b in st.session_state.cards])
+            else:
+                st.error("Erro formato.")
+
+        st.markdown("#### Próximas revisões")
+        today = datetime.today().strftime("%Y-%m-%d")
+        due_cards = [c for c in st.session_state.cards if c["due"] <= today]
+        if due_cards:
+            for i, c in enumerate(due_cards[:10]):
+                st.write(f"- [{c['deck']}] {c['front']}")
+                fb = st.radio(f"Como foi? (Card {i+1})", ["Errei", "Duvidei", "Acertei"], horizontal=True, key=f"fb_{i}")
+                if st.button(f"Registrar (Card {i+1})"):
+                    if fb == "Errei":
+                        c["ease"] = max(1.3, c["ease"] - 0.2)
+                        c["interval"] = 1
+                    elif fb == "Duvidei":
+                        c["ease"] = max(1.3, c["ease"] - 0.1)
+                        c["interval"] = max(1, int(c["interval"] * 1.2))
+                    else:
+                        c["ease"] = min(3.0, c["ease"] + 0.1)
+                        c["interval"] = max(1, int(c["interval"] * c["ease"]))
+                    next_due = datetime.today() + timedelta(days=c["interval"])
+                    c["due"] = next_due.strftime("%Y-%m-%d")
+                    st.success(f"Próxima revisão em {c['interval']} dias ({c['due']}).")
+
+        if st.session_state.cards:
+            csv = "deck,front,back\n" + "\n".join([f"{c['deck']},{c['front']},{c['back']}" for c in st.session_state.cards])
             st.download_button("💾 Baixar Anki CSV", csv, "anki.csv")
 
     # 1.4 CRONOGRAMA
     with tab_crono:
-        st.markdown("### 📅 Cronograma")
+        st.markdown("### 📅 Cronograma com revisões")
         h = st.slider("Horas/dia", 1, 8, 4)
         topicos = st.text_area("Listar tópicos (um por linha)")
         if st.button("Gerar Plano"):
@@ -394,7 +533,9 @@ if menu_opcao == "🎓 Área do Estudante":
             base = datetime.today()
             for i, t in enumerate(topics):
                 d = base + timedelta(days=i)
-                plan.append(f"{d.strftime('%d/%m')} - {t} ({h}h)")
+                rev1 = d + timedelta(days=1)
+                rev2 = d + timedelta(days=7)
+                plan.append(f"{d.strftime('%d/%m')} - {t} ({h}h) | Revisões: {rev1.strftime('%d/%m')}, {rev2.strftime('%d/%m')}")
             res = "\n".join(plan)
             st.text_area("Resultado", res, height=300)
             if criar_docx(res): st.download_button("💾 Baixar Plano", criar_docx(res), "Plano.docx")
@@ -403,53 +544,89 @@ if menu_opcao == "🎓 Área do Estudante":
 # --- MENTOR ---
 elif menu_opcao == "💬 Mentor Jurídico":
     st.title("💬 Mentor Jurídico")
+    perfil = st.selectbox("Perfil", ["Professor Didático", "Doutrinador (Técnico)", "Jurisprudencial", "Coach Motivacional"])
     if "chat" not in st.session_state: st.session_state.chat = []
     for m in st.session_state.chat: st.chat_message(m["role"]).write(m["content"])
-    
+
     if p := st.chat_input("Dúvida..."):
         st.session_state.chat.append({"role":"user", "content":p})
         st.chat_message("user").write(p)
         with st.chat_message("assistant"):
             with st.spinner("Pensando..."):
-                r = processar_ia(p, system_instruction="Você é um professor de direito. Seja didático e cite leis.")
+                sys = {
+                    "Professor Didático": "Explique com exemplos e analogias, cite leis quando necessário.",
+                    "Doutrinador (Técnico)": "Seja técnico, cite doutrina e artigos de lei.",
+                    "Jurisprudencial": "Baseie-se em precedentes STF/STJ e súmulas.",
+                    "Coach Motivacional": "Traga foco, disciplina e estratégia de estudo, sem prometer resultados."
+                }[perfil]
+                r = processar_ia(p, system_instruction=sys)
                 st.write(r)
                 st.session_state.chat.append({"role":"assistant", "content":r})
                 add_xp(5)
 
+    st.markdown("---")
+    st.markdown("### ✅ Checklist jurídico automático")
+    caso = st.text_area("Descreva o caso (fatos, partes, pedidos)")
+    if st.button("Gerar checklist de riscos"):
+        prompt = f"Com base no caso, gere um checklist de riscos jurídicos, pontos de atenção e documentos necessários. Caso: {caso}"
+        r = processar_ia(prompt, task_type="text", temperature=0.2)
+        st.write(r)
+
 # --- CONTRATOS ---
 elif menu_opcao == "📄 Redação de Contratos":
-    st.title("📄 Redação de Contratos")
-    tipo = st.selectbox("Tipo", ["Contrato", "Petição", "Procuração"])
-    detalhes = st.text_area("Detalhes das partes e objeto")
+    st.title("📄 Redação de Contratos e Peças")
+    tipo = st.selectbox("Tipo", ["Contrato", "Petição Inicial", "Contestação", "Procuração"])
+    c1, c2 = st.columns(2)
+    pa = c1.text_input("Parte A")
+    pb = c2.text_input("Parte B")
+    objeto = st.text_input("Objeto")
+    detalhes = st.text_area("Detalhes e cláusulas desejadas")
     if st.button("Redigir"):
-        if detalhes:
-            with st.spinner("Escrevendo..."):
-                r = processar_ia(f"Redija um {tipo}. Detalhes: {detalhes}. Formal e jurídico.", temperature=0.2)
-                st.text_area("Minuta", r, height=400)
-                if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), f"{tipo}.docx")
-                add_xp(20)
+        if not pa or not pb or not objeto:
+            st.error("Preencha Parte A, Parte B e Objeto.")
+        else:
+            prompt = f"Redija um {tipo} formal. Partes: {pa} e {pb}. Objeto: {objeto}. Detalhes: {detalhes}. Inclua cláusulas essenciais e cite leis aplicáveis."
+            r = processar_ia(prompt, task_type="text", temperature=0.2)
+            st.text_area("Minuta", r, height=400)
+            checklist = processar_ia(f"Liste riscos e pontos de atenção do {tipo} acima, em tópicos.", task_type="text", temperature=0.2)
+            st.markdown("### ⚠️ Checklist de riscos")
+            st.write(checklist)
+            if criar_docx(r): st.download_button("💾 Baixar DOCX", criar_docx(r), f"{tipo}.docx")
+            add_xp(20)
 
 # --- CARTÓRIO OCR ---
 elif menu_opcao == "🏢 Cartório Digital (OCR)":
-    st.title("🏢 Cartório Digital")
-    u = st.file_uploader("Imagem da Certidão", type=["jpg", "png"])
-    if u and st.button("Transcrever"):
-        with st.spinner("Lendo..."):
-            r = processar_ia("Transcreva fielmente como Inteiro Teor.", file_bytes=u.getvalue(), task_type="vision")
+    st.title("🏢 Cartório Digital (OCR híbrido)")
+    u = st.file_uploader("Imagem/PDF da Certidão", type=["jpg", "png", "pdf"])
+    if u and st.button("Transcrever Inteiro Teor"):
+        with st.spinner("Processando..."):
+            file_bytes = u.getvalue()
+            if PIL_AVAILABLE and u.type in ["image/jpeg", "image/png"]:
+                img = Image.open(BytesIO(file_bytes)).convert("L")
+                img = ImageOps.autocontrast(img)
+                img = img.filter(ImageFilter.SHARPEN)
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                file_bytes = buf.getvalue()
+            prompt = "Transcreva fielmente como Certidão de Inteiro Teor. Indique [Selo], [Assinatura], [Livro], [Folha], [Termo], [Data]."
+            r = processar_ia(prompt, file_bytes=file_bytes, task_type="vision")
             st.text_area("Resultado", r, height=400)
-            if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), "InteiroTeor.docx")
+            if criar_docx(r): st.download_button("💾 Baixar DOCX", criar_docx(r), "InteiroTeor.docx")
             add_xp(25)
 
 # --- TRANSCRIÇÃO ---
 elif menu_opcao == "🎙️ Transcrição":
-    st.title("🎙️ Transcrição")
+    st.title("🎙️ Transcrição de Áudio")
     tab_mic, tab_up = st.tabs(["🎤 Gravar", "📂 Upload"])
     with tab_mic:
         audio = st.audio_input("Gravar")
         if audio and st.button("Transcrever Gravação"):
             with st.spinner("Processando..."):
                 r = processar_ia("", file_bytes=audio.getvalue(), task_type="audio")
-                st.write(r) # Exibe a transcrição pura, sem simulação
+                st.write(r)
+                resumo = processar_ia(f"Resuma em tópicos o texto: {r}", task_type="text", temperature=0.2)
+                st.markdown("### 🧾 Resumo automático")
+                st.write(resumo)
                 if criar_docx(r): st.download_button("Download", criar_docx(r), "Audio.docx")
                 add_xp(20)
     with tab_up:
@@ -458,6 +635,9 @@ elif menu_opcao == "🎙️ Transcrição":
             with st.spinner("Processando..."):
                 r = processar_ia("", file_bytes=upl.getvalue(), task_type="audio")
                 st.write(r)
+                resumo = processar_ia(f"Resuma em tópicos o texto: {r}", task_type="text", temperature=0.2)
+                st.markdown("### 🧾 Resumo automático")
+                st.write(resumo)
                 add_xp(20)
 
 # --- FEEDBACK ---
@@ -475,12 +655,13 @@ elif menu_opcao == "⭐ Feedback":
 elif menu_opcao == "📊 Logs":
     st.title("📊 Logs do Sistema")
     if st.session_state.logs:
-        for l in st.session_state.logs[-20:]:
-            st.code(f"{l['timestamp']} | {l['task_type']} | {l['status']}")
-    else: st.info("Sem logs.")
+        for l in st.session_state.logs[-50:]:
+            st.code(f"{l['timestamp']} | {l['task_type']} | {l['model']} | {l['latency_ms']}ms | {l['status']}")
+    else:
+        st.info("Sem logs.")
 
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v6.1 Stable")
+    st.write("Carmélio AI - v8.0 Pro")
     st.write("Desenvolvido por Arthur Carmélio.")
