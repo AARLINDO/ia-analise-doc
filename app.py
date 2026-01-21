@@ -4,7 +4,7 @@ import google.generativeai as genai
 # ==============================================================================
 # CONFIGURAÇÃO VISUAL
 # ==============================================================================
-st.set_page_config(page_title="Carmélio AI Studio 2.0", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Carmélio AI Studio", page_icon="⚖️", layout="wide")
 
 st.markdown("""
 <style>
@@ -16,7 +16,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# LÓGICA DO GEMINI 2.0 (MODERNO)
+# LÓGICA DO GEMINI 1.5 (ESTÁVEL E GRÁTIS)
 # ==============================================================================
 def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
     # 1. PEGA A CHAVE DO COFRE
@@ -33,8 +33,8 @@ def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None
         "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito Policial, Prisões e pegadinhas da banca FGV/Cebraspe."
     }
     
-    # 3. USA O MODELO 2.0 (Que seu Scanner achou!)
-    model_name = "gemini-2.0-flash" 
+    # 3. USA O MODELO 1.5 FLASH (Agora compatível com sua atualização!)
+    model_name = "gemini-1.5-flash"
     
     # Prepara o conteúdo
     content = [prompt]
@@ -50,17 +50,22 @@ def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None
         return response.text
 
     except Exception as e:
-        return f"❌ Erro ao conectar com Gemini 2.0: {str(e)}"
+        # Se der erro no Flash, tenta o Pro (Backup)
+        try:
+            model_backup = genai.GenerativeModel("gemini-1.5-pro", system_instruction=personas[mode])
+            return model_backup.generate_content(content).text
+        except:
+            return f"❌ Erro de Conexão: {str(e)}"
 
 # ==============================================================================
 # INTERFACE
 # ==============================================================================
-st.title("⚖️ Carmélio AI Studio 2.0")
+st.title("⚖️ Carmélio AI Studio")
 
 # Verifica conexão visualmente
 if "GOOGLE_API_KEY" in st.secrets:
     with st.sidebar:
-        st.success(f"✅ Conectado: Gemini 2.0")
+        st.success(f"✅ Conectado: Gemini 1.5 Flash")
         st.divider()
         mode = st.radio("Modo de Estudo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
         mode_map = {"🤖 Geral": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
@@ -81,7 +86,7 @@ if "GOOGLE_API_KEY" in st.secrets:
             st.session_state['chat'].append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Gemini 2.0 pensando..."):
+                with st.spinner("Analisando..."):
                     resp = get_gemini_response(prompt, mode=mode_map[mode])
                     st.markdown(resp)
                     st.session_state['chat'].append({"role": "assistant", "content": resp})
