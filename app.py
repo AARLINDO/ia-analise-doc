@@ -10,7 +10,7 @@ import os
 # ==============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Assistente Jurídico",
-    page_icon="⚖️",
+    page_icon="logo.jpg.png",  # <--- AQUI ESTÁ A MUDANÇA (Sua Logo na Aba!)
     layout="wide"
 )
 
@@ -38,13 +38,13 @@ st.markdown("""
     h1, h2, h3 { color: #F3F4F6; font-family: 'Inter', sans-serif; }
     p, label, .stMarkdown { color: #9CA3AF; }
     
-    /* PERFIL */
+    /* PERFIL LATERAL (SIMPLIFICADO) */
     .profile-card {
         background: #1F2430; padding: 15px; border-radius: 10px; border: 1px solid #2B2F3B;
         text-align: center; margin-bottom: 20px; margin-top: 10px;
     }
-    .profile-name { color: white; font-weight: bold; font-size: 16px; margin-top: 10px; }
-    .profile-role { color: #3B82F6; font-size: 12px; margin-top: 5px; font-weight: 600; text-transform: uppercase; }
+    .profile-label { color: #9CA3AF; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .profile-name { color: white; font-weight: bold; font-size: 18px; margin-top: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,28 +99,27 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     except Exception as e: return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 3. BARRA LATERAL (COM LOGO CORRIGIDA)
+# 3. BARRA LATERAL (LIMPA E MODERNA)
 # ==============================================================================
 with st.sidebar:
-    # --- LOGO OFICIAL ---
-    # Ajustado para ler 'logo.jpg.png' conforme o upload no GitHub
+    # --- LOGO ---
     try:
         st.image("logo.jpg.png", use_container_width=True)
     except:
-        st.warning("⚠️ Logo não encontrada. Verifique se o arquivo 'logo.jpg.png' está no GitHub.")
+        st.warning("⚠️ Logo não encontrada.")
 
-    # --- CARD DE PERFIL ---
+    # --- CARD DE AUTORIA (SIMPLIFICADO) ---
     st.markdown("""
     <div class="profile-card">
+        <div class="profile-label">Desenvolvido por</div>
         <div class="profile-name">Arthur Carmélio</div>
-        <div class="profile-role">Bacharel em Direito<br>Especialista Notarial</div>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### Menu Principal")
     menu_opcao = st.radio(
         "Navegação:",
-        ["💬 Mentor Jurídico", "🎓 Área do Estudante", "📄 Redação de Contratos", "🏢 Cartório Digital", "🎙️ Transcrição", "⚙️ Sobre"],
+        ["💬 Mentor Jurídico", "🎓 Área do Estudante", "📄 Redação de Contratos", "🏢 Cartório Digital", "🎙️ Transcrição", "👤 Sobre o Autor"],
         label_visibility="collapsed"
     )
     
@@ -232,22 +231,35 @@ elif "Transcrição" in menu_opcao:
             st.write(r)
             st.download_button("💾 Baixar", criar_docx(r), "Audio.docx")
 
-# --- MÓDULO 6: SOBRE (SEO) ---
+# --- MÓDULO 6: SOBRE O AUTOR ---
 elif "Sobre" in menu_opcao:
-    st.title("Sobre o Carmélio AI")
-    st.markdown("""
-    ### O Futuro da Advocacia e dos Serviços Notariais
+    st.title("👤 Sobre o Autor")
     
-    O **Carmélio AI** é uma ferramenta desenvolvida para auxiliar estudantes de direito, advogados e serventuários da justiça.
+    col_perfil, col_bio = st.columns([1, 2])
     
-    **Funcionalidades:**
-    * 🤖 Inteligência Artificial Jurídica (Llama 3 / Groq)
-    * 📄 Gerador de Contratos e Peças Processuais
-    * 🎓 Assistente de Estudos para OAB e Concursos
-    * 🏢 Leitura de Documentos Antigos (OCR)
-    
-    **Desenvolvedor:**
-    Arthur Carmélio - Bacharel em Direito e Especialista Notarial.
-    """)
-    st.divider()
-    st.caption("Tags: Assistente Jurídico, IA Jurídica, OAB, Cartório Digital, Arthur Carmélio.")
+    with col_perfil:
+        # Tenta mostrar a logo ou uma foto de perfil se você tiver
+        try:
+            st.image("logo.jpg.png", width=200)
+        except:
+            st.markdown("⚖️")
+            
+    with col_bio:
+        st.markdown("""
+        ### Arthur Carmélio
+        **Desenvolvedor & Especialista Jurídico**
+        
+        Sou Bacharel em Direito e Especialista Notarial, apaixonado por unir a tradição jurídica com a inovação tecnológica. 
+        
+        Criei o **Carmélio AI** para resolver dores reais da profissão: a burocracia repetitiva, a necessidade de análise rápida de documentos e o estudo eficiente para concursos.
+        
+        **Formação & Expertise:**
+        * 🎓 Bacharel em Direito
+        * 📜 Especialista em Serviços Notariais e Registrais
+        * 💻 Desenvolvedor Python com foco em IA (LLMs)
+        
+        ---
+        **Contato:**
+        * [LinkedIn](https://www.linkedin.com/in/arthurcarmelio/)
+        * [WhatsApp](https://wa.me/5548920039720)
+        """)
