@@ -4,22 +4,29 @@ from docx import Document
 from io import BytesIO
 import base64
 import os
+import datetime
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E SEO
+# 1. CONFIGURAÇÃO E DESIGN
 # ==============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Assistente Jurídico",
-    page_icon="logo.jpg.png",  # <--- AQUI ESTÁ A MUDANÇA (Sua Logo na Aba!)
+    page_title="Carmélio AI | Suíte Jurídica",
+    page_icon="logo.jpg.png",
     layout="wide"
 )
 
-# CSS "Dark Mode Premium"
+# CSS "Dark Mode Premium" - Estilo QConcursos Dark
 st.markdown("""
 <style>
     /* GERAL */
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
+    
+    /* CARDS DE QUESTÕES */
+    .question-card {
+        background-color: #1F2430; padding: 20px; border-radius: 10px; border: 1px solid #3B82F6;
+        margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
     
     /* INPUTS */
     .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
@@ -37,19 +44,11 @@ st.markdown("""
     /* TEXTOS */
     h1, h2, h3 { color: #F3F4F6; font-family: 'Inter', sans-serif; }
     p, label, .stMarkdown { color: #9CA3AF; }
-    
-    /* PERFIL LATERAL (SIMPLIFICADO) */
-    .profile-card {
-        background: #1F2430; padding: 15px; border-radius: 10px; border: 1px solid #2B2F3B;
-        text-align: center; margin-bottom: 20px; margin-top: 10px;
-    }
-    .profile-label { color: #9CA3AF; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-    .profile-name { color: white; font-weight: bold; font-size: 18px; margin-top: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. FUNÇÕES DO SISTEMA (BACKEND)
+# 2. FUNÇÕES DO SISTEMA
 # ==============================================================================
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -99,112 +98,155 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     except Exception as e: return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 3. BARRA LATERAL (LIMPA E MODERNA)
+# 3. BARRA LATERAL
 # ==============================================================================
 with st.sidebar:
-    # --- LOGO ---
-    try:
-        st.image("logo.jpg.png", use_container_width=True)
-    except:
-        st.warning("⚠️ Logo não encontrada.")
+    try: st.image("logo.jpg.png", use_container_width=True)
+    except: st.warning("Logo não encontrada.")
 
-    # --- CARD DE AUTORIA (SIMPLIFICADO) ---
-    st.markdown("""
-    <div class="profile-card">
-        <div class="profile-label">Desenvolvido por</div>
-        <div class="profile-name">Arthur Carmélio</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; color: #9CA3AF; margin-bottom: 20px;'>Desenvolvido por<br><b style='color: white;'>Arthur Carmélio</b></div>", unsafe_allow_html=True)
     
-    st.markdown("### Menu Principal")
-    menu_opcao = st.radio(
-        "Navegação:",
-        ["💬 Mentor Jurídico", "🎓 Área do Estudante", "📄 Redação de Contratos", "🏢 Cartório Digital", "🎙️ Transcrição", "👤 Sobre o Autor"],
-        label_visibility="collapsed"
-    )
-    
+    menu_opcao = st.radio("Menu:", ["🎓 Área do Estudante", "💬 Mentor Jurídico", "📄 Redação de Contratos", "🏢 Cartório Digital", "🎙️ Transcrição", "👤 Sobre"], label_visibility="collapsed")
     st.markdown("---")
-    c1, c2 = st.columns(2)
-    with c1: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
-    with c2: st.markdown("[![WhatsApp](https://img.shields.io/badge/WhatsApp-Falar-green?logo=whatsapp)](https://wa.me/5548920039720)")
+    st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
 
 # ==============================================================================
 # 4. ÁREA PRINCIPAL
 # ==============================================================================
 
-# --- MÓDULO 1: MENTOR JURÍDICO ---
-if "Mentor" in menu_opcao:
-    st.title("💬 Mentor Jurídico IA")
-    st.caption("Tira-dúvidas jurídicas, análise de casos e jurisprudência.")
+# --- MÓDULO 1: ÁREA DO ESTUDANTE (UPGRADE TIPO QCONCURSOS) ---
+if "Estudante" in menu_opcao:
+    st.title("🎓 Área do Estudante Pro")
+    st.caption("Treine com a inteligência do Gemini e a estrutura do QConcursos.")
     
-    c_conf, c_chat = st.columns([1, 3])
-    with c_conf:
-        st.markdown("#### Personalidade")
-        perfil = st.selectbox("Modo:", ["Advogado Sênior", "Mentor Policial", "Tabelião"])
-        sys = "Seja formal e técnico." if "Advogado" in perfil else "Foco em Penal e Concursos." if "Policial" in perfil else "Foco em Registros Públicos."
-        if st.button("Limpar"): st.session_state.chat = []; st.rerun()
-
-    with c_chat:
-        if 'chat' not in st.session_state: st.session_state.chat = []
-        for m in st.session_state.chat:
-            st.chat_message(m['role'], avatar="⚖️" if m['role']=="assistant" else "👤").write(m['content'])
+    tab_questoes, tab_cronograma, tab_flash = st.tabs(["📝 Banco de Questões", "📅 Criar Cronograma", "⚡ Flashcards"])
+    
+    # --- SUB-ABA: BANCO DE QUESTÕES ---
+    with tab_questoes:
+        st.markdown("### 🔍 Filtros de Estudo")
         
-        if p:=st.chat_input("Digite sua dúvida..."):
-            st.session_state.chat.append({"role":"user", "content":p})
-            st.chat_message("user").write(p)
-            with st.chat_message("assistant", avatar="⚖️"):
-                with st.spinner("Pesquisando..."):
-                    r = processar_ia(p, task_type="text", system_instruction=sys)
-                    st.write(r)
-                    st.session_state.chat.append({"role":"assistant", "content":r})
-            if r:
-                st.download_button("💾 Baixar Resposta", criar_docx(r), "Parecer.docx")
-
-# --- MÓDULO 2: ÁREA DO ESTUDANTE ---
-elif "Estudante" in menu_opcao:
-    st.title("🎓 Área do Estudante & Concurseiro")
-    st.caption("Ferramentas de Estudo Ativo para OAB e Concursos Públicos.")
-    
-    tab_flash, tab_quiz = st.tabs(["🗂️ Gerador de Flashcards", "📝 Quiz/Simulado"])
-    
-    with tab_flash:
-        st.markdown("### Crie resumos rápidos para memorização")
-        tema_flash = st.text_input("Qual o tema?", placeholder="Ex: Art. 5 da CF, Crimes contra a Vida, Usucapião...")
-        qtd_flash = st.slider("Quantidade de Cartões:", 3, 10, 5)
+        # Filtros estilo QConcursos
+        c1, c2, c3, c4 = st.columns(4)
+        disciplina = c1.selectbox("Disciplina", ["Direito Constitucional", "Direito Administrativo", "Direito Penal", "Processo Penal", "Direito Civil", "Notarial e Registral"])
+        banca = c2.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC", "Indiferente"])
+        cargo = c3.text_input("Cargo Foco", placeholder="Ex: Delegado, Escrevente")
+        assunto = c4.text_input("Assunto Específico", placeholder="Ex: Atos Administrativos")
         
-        if st.button("Gerar Flashcards"):
-            with st.spinner(f"Criando {qtd_flash} flashcards sobre {tema_flash}..."):
-                prompt = f"Crie {qtd_flash} Flashcards de estudo sobre '{tema_flash}'. Formato: PERGUNTA (em negrito) e RESPOSTA (curta e direta). Use emojis."
-                res_flash = processar_ia(prompt, task_type="text", system_instruction="Você é um professor focado em memorização.")
-                st.markdown(res_flash)
-                st.download_button("💾 Baixar Flashcards", criar_docx(res_flash), "Flashcards.docx")
+        if 'questao_atual' not in st.session_state: st.session_state.questao_atual = None
+        if 'gabarito_atual' not in st.session_state: st.session_state.gabarito_atual = None
+        
+        if st.button("🔎 Gerar Nova Questão"):
+            with st.spinner(f"A IA está criando uma questão inédita de {banca}..."):
+                # Prompt avançado para criar JSON-like structure
+                prompt = f"""
+                Crie UMA questão de concurso inédita e difícil.
+                Filtros: Disciplina: {disciplina}. Assunto: {assunto}. Banca estilo: {banca}. Cargo: {cargo}.
                 
-    with tab_quiz:
-        st.markdown("### Teste seus conhecimentos")
-        tema_quiz = st.text_input("Matéria do Simulado:", placeholder="Ex: Direito Administrativo - Atos Administrativos")
-        dificuldade = st.select_slider("Dificuldade:", ["Fácil", "Médio", "Difícil (FGV/Cebraspe)"])
+                FORMATO DE RESPOSTA OBRIGATÓRIO (Siga estritamente):
+                ENUNCIADO: [Escreva o enunciado aqui]
+                A) [Alternativa A]
+                B) [Alternativa B]
+                C) [Alternativa C]
+                D) [Alternativa D]
+                E) [Alternativa E]
+                CORRETA: [Apenas a letra, ex: C]
+                EXPLICAÇÃO: [Explique detalhadamente por que a correta é a correta e por que as outras estão erradas, citando artigos de lei].
+                """
+                res = processar_ia(prompt, task_type="text", system_instruction="Você é um examinador de banca de elite.")
+                st.session_state.questao_atual = res
+                st.session_state.mostrar_resposta = False # Esconde a resposta ao gerar nova
         
-        if st.button("Gerar Simulado"):
-            with st.spinner("Elaborando questões..."):
-                prompt = f"Crie um simulado com 3 questões de múltipla escolha sobre '{tema_quiz}'. Nível: {dificuldade}. No final, coloque o GABARITO COMENTADO."
-                res_quiz = processar_ia(prompt, task_type="text", system_instruction="Você é um examinador de banca de concurso.")
-                st.info("Responda mentalmente antes de ver o gabarito no final!")
-                st.write(res_quiz)
-                st.download_button("💾 Baixar Simulado", criar_docx(res_quiz), "Simulado.docx")
+        # Exibição da Questão
+        if st.session_state.questao_atual:
+            # Separa o texto visualmente
+            texto_completo = st.session_state.questao_atual
+            
+            # Tenta separar enunciado e alternativas da resposta (Truque simples de split)
+            try:
+                parte_visivel = texto_completo.split("CORRETA:")[0]
+                parte_gabarito = "CORRETA:" + texto_completo.split("CORRETA:")[1]
+            except:
+                parte_visivel = texto_completo
+                parte_gabarito = "Erro na formatação da IA. Tente gerar outra."
+
+            st.markdown("---")
+            st.markdown(f"""
+            <div class="question-card">
+                <h3>⚖️ Questão Inédita ({banca})</h3>
+                <div style="font-size: 18px; white-space: pre-wrap;">{parte_visivel}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Botões de Resposta
+            col_botoes, col_ver = st.columns([3, 1])
+            with col_botoes:
+                st.caption("Marque sua resposta mentalmente e clique em conferir.")
+            with col_ver:
+                if st.button("👁️ Ver Gabarito Comentado"):
+                    st.session_state.mostrar_resposta = True
+            
+            if st.session_state.get('mostrar_resposta'):
+                st.success("✅ Gabarito e Comentários do Professor IA:")
+                st.markdown(f"```text\n{parte_gabarito}\n```")
+                st.info("💡 Dica: A IA explica citando a lei. Leia com atenção para fixar!")
+
+    # --- SUB-ABA: CRONOGRAMA ---
+    with tab_cronograma:
+        st.markdown("### 📅 Planejador de Estudos Inteligente")
+        c_horas = st.slider("Quantas horas você tem por dia?", 1, 8, 3)
+        c_obj = st.text_input("Qual seu objetivo?", value="Passar na OAB/Concurso PCSC")
+        c_dias = st.multiselect("Dias disponíveis:", ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"], default=["Seg", "Ter", "Qua", "Qui", "Sex"])
+        
+        if st.button("🗓️ Montar Meu Cronograma"):
+            with st.spinner("A IA está organizando sua rotina..."):
+                prompt = f"Crie uma tabela de estudos semanal para {c_obj}. Tenho {c_horas} horas por dia nos dias {c_dias}. Intercale Doutrina, Lei Seca e Questões. Seja realista."
+                r = processar_ia(prompt, task_type="text")
+                st.markdown(r)
+                st.download_button("💾 Baixar Cronograma", criar_docx(r), "Cronograma.docx")
+
+    # --- SUB-ABA: FLASHCARDS ---
+    with tab_flash:
+        st.markdown("### ⚡ Flashcards de Revisão")
+        tema = st.text_input("Tema para revisar:", placeholder="Ex: Prazos Processuais Penais")
+        if st.button("Gerar Flashcards"):
+            with st.spinner("Criando..."):
+                p = f"Crie 5 flashcards sobre {tema}. Formato: PERGUNTA (Frente) e RESPOSTA (Verso)."
+                r = processar_ia(p, task_type="text")
+                st.write(r)
+
+# --- MÓDULO 2: MENTOR JURÍDICO ---
+elif "Mentor" in menu_opcao:
+    st.title("💬 Mentor Jurídico IA")
+    modo = st.selectbox("Modo:", ["Professor Didático", "Advogado Técnico", "Mentor Policial"])
+    
+    if 'chat' not in st.session_state: st.session_state.chat = []
+    for m in st.session_state.chat:
+        st.chat_message(m['role'], avatar="⚖️" if m['role']=="assistant" else "👤").write(m['content'])
+    
+    if p:=st.chat_input("Dúvida jurídica..."):
+        st.session_state.chat.append({"role":"user", "content":p})
+        st.chat_message("user").write(p)
+        with st.chat_message("assistant", avatar="⚖️"):
+            with st.spinner("Analisando..."):
+                instrucao = "Seja didático." if "Professor" in modo else "Seja técnico e cite leis."
+                r = processar_ia(p, task_type="text", system_instruction=instrucao)
+                st.write(r)
+                st.session_state.chat.append({"role":"assistant", "content":r})
+        if r: st.download_button("💾 Baixar", criar_docx(r), "Resposta.docx")
 
 # --- MÓDULO 3: CONTRATOS ---
 elif "Contratos" in menu_opcao:
     st.title("📄 Redação de Contratos")
     t = st.selectbox("Tipo:", ["Aluguel Residencial", "Comercial", "Compra e Venda", "Serviços"])
     c1, c2 = st.columns(2)
-    a = c1.text_input("Contratante", placeholder="Nome, CPF...")
-    b = c2.text_input("Contratado", placeholder="Nome, CPF...")
-    val = c1.text_input("Valor", placeholder="R$...")
-    obj = c2.text_input("Objeto", placeholder="Descrição...")
+    a = c1.text_input("Contratante")
+    b = c2.text_input("Contratado")
+    val = c1.text_input("Valor")
+    obj = c2.text_input("Objeto")
     if st.button("🚀 Gerar Minuta"):
         if a and val:
             with st.spinner("Redigindo..."):
-                prompt = f"Atue como Tabelião. Redija um {t} completo (ABNT). LOCADOR: {a}, LOCATÁRIO: {b}, VALOR: {val}, OBJETO: {obj}. Inclua cláusulas de praxe, foro e multa."
+                prompt = f"Atue como Tabelião. Redija um {t} completo (ABNT). LOCADOR: {a}, LOCATÁRIO: {b}, VALOR: {val}, OBJETO: {obj}."
                 r = processar_ia(prompt, task_type="text")
                 st.session_state['cont'] = r
     if 'cont' in st.session_state:
@@ -213,13 +255,13 @@ elif "Contratos" in menu_opcao:
 
 # --- MÓDULO 4: CARTÓRIO ---
 elif "Cartório" in menu_opcao:
-    st.title("🏢 Cartório Digital (OCR)")
+    st.title("🏢 Cartório Digital")
     u = st.file_uploader("Documento", type=["jpg","pdf"])
     if u and st.button("Extrair"):
         with st.spinner("Lendo..."):
-            r = processar_ia("Transcreva este documento.", file_bytes=u.getvalue(), task_type="vision")
+            r = processar_ia("Transcreva.", file_bytes=u.getvalue(), task_type="vision")
             st.text_area("Texto", r, height=400)
-            st.download_button("💾 Baixar DOCX", criar_docx(r), "Doc.docx")
+            st.download_button("💾 Baixar", criar_docx(r), "Doc.docx")
 
 # --- MÓDULO 5: TRANSCRIÇÃO ---
 elif "Transcrição" in menu_opcao:
@@ -231,35 +273,21 @@ elif "Transcrição" in menu_opcao:
             st.write(r)
             st.download_button("💾 Baixar", criar_docx(r), "Audio.docx")
 
-# --- MÓDULO 6: SOBRE O AUTOR ---
+# --- MÓDULO 6: SOBRE ---
 elif "Sobre" in menu_opcao:
     st.title("👤 Sobre o Autor")
-    
-    col_perfil, col_bio = st.columns([1, 2])
-    
-    with col_perfil:
-        # Tenta mostrar a logo ou uma foto de perfil se você tiver
-        try:
-            st.image("logo.jpg.png", width=200)
-        except:
-            st.markdown("⚖️")
-            
-    with col_bio:
+    c1, c2 = st.columns([1,2])
+    with c1: 
+        try: st.image("logo.jpg.png", width=200)
+        except: st.write("⚖️")
+    with c2:
         st.markdown("""
         ### Arthur Carmélio
         **Desenvolvedor & Especialista Jurídico**
         
-        Sou Bacharel em Direito e Especialista Notarial, apaixonado por unir a tradição jurídica com a inovação tecnológica. 
+        Ferramenta desenvolvida para revolucionar a rotina jurídica e de estudos.
         
-        Criei o **Carmélio AI** para resolver dores reais da profissão: a burocracia repetitiva, a necessidade de análise rápida de documentos e o estudo eficiente para concursos.
-        
-        **Formação & Expertise:**
         * 🎓 Bacharel em Direito
-        * 📜 Especialista em Serviços Notariais e Registrais
-        * 💻 Desenvolvedor Python com foco em IA (LLMs)
-        
-        ---
-        **Contato:**
-        * [LinkedIn](https://www.linkedin.com/in/arthurcarmelio/)
-        * [WhatsApp](https://wa.me/5548920039720)
+        * 📜 Especialista Notarial
+        * 💻 Desenvolvedor Python
         """)
