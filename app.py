@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+import os
 
 # ==============================================================================
 # CONFIGURAÇÃO
@@ -15,44 +16,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# BARRA LATERAL (ENTRADA MANUAL DA CHAVE)
+# CONEXÃO AUTOMÁTICA (VIA SECRETS)
 # ==============================================================================
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2585/2585188.png", width=60)
-    st.header("🔐 Acesso Manual")
-    
-    # Campo para colar a chave (Obrigatório)
-    api_key = st.text_input("Cole sua NOVA Google API Key:", type="password")
-    
-    if api_key:
-        st.success("Chave Recebida!")
-    else:
-        st.warning("☝️ Cole a chave acima para começar.")
+def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
+    # 1. Tenta pegar a chave do Secrets
+    try:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+    except:
+        return "⚠️ ERRO: O Secrets está vazio ou errado. Vá em Settings > Secrets e cole: GOOGLE_API_KEY = 'Sua_Chave'"
 
-    st.divider()
-    
-    # Seletor de Modo
-    mode = st.radio("Modo de Estudo:", ["🤖 Geral", "⚖️ OAB (Trabalho)", "🚓 PCSC (Escrivão)"])
-    mode_map = {"🤖 Geral": "padrao", "⚖️ OAB (Trabalho)": "oab", "🚓 PCSC (Escrivão)": "pcsc"}
-    
-    if st.button("🗑️ Limpar Conversa"):
-        st.session_state['chat'] = []
-        st.rerun()
-
-# ==============================================================================
-# LÓGICA DO GEMINI
-# ==============================================================================
-def get_gemini_response(key, prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
-    # Configura com a chave que você colou na hora
-    genai.configure(api_key=key)
+    genai.configure(api_key=api_key)
     
     personas = {
-        "padrao": "Você é um assistente jurídico útil e preciso.",
-        "oab": "ATUE COMO: Examinador da OAB (2ª Fase Trabalho). Exija fundamentação (Art. 840 CLT).",
-        "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito Policial e pegadinhas."
+        "padrao": "Você é um assistente jurídico útil.",
+        "oab": "ATUE COMO: Examinador OAB (Trabalho). Exija fundamentação (Art. 840 CLT).",
+        "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito e pegadinhas."
     }
     
-    # Tenta conectar (Flash -> Pro -> Antigo)
+    # 2. Tenta modelos (Anti-Erro)
     models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
     
     final_prompt = [prompt]
@@ -69,41 +50,48 @@ def get_gemini_response(key, prompt, context_text="", image_data=None, mime_type
         except:
             continue
             
-    return "❌ Erro: Chave inválida. Verifique se copiou corretamente."
+    return "❌ Erro: Chave inválida. Gere uma nova no Google AI Studio."
 
 # ==============================================================================
-# INTERFACE PRINCIPAL
+# INTERFACE
 # ==============================================================================
 st.title("⚖️ Carmélio AI Studio")
 
-if api_key:
-    tab1, tab2 = st.tabs(["💬 Chat Mentor", "📄 Analisar Arquivo"])
+# Verifica se a chave existe
+if "GOOGLE_API_KEY" in st.secrets:
+    st.success("🔐 Sistema Conectado")
+    
+    with st.sidebar:
+        mode = st.radio("Modo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
+        mode_map = {"🤖 Geral": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
+        if st.button("🗑️ Limpar"):
+            st.session_state['chat'] = []
+            st.rerun()
 
-    # CHAT
+    tab1, tab2 = st.tabs(["💬 Chat", "📄 Arquivos"])
+
     with tab1:
         if 'chat' not in st.session_state: st.session_state['chat'] = []
         for msg in st.session_state['chat']:
-            with st.chat_message(msg['role'], avatar="👤" if msg['role'] == "user" else "⚖️"):
+            with st.chat_message(msg['role'], avatar="👤" if msg['role'] == "user" else "🤖"):
                 st.markdown(msg['content'])
         
-        if prompt := st.chat_input("Digite sua dúvida..."):
+        if prompt := st.chat_input("Digite..."):
             st.session_state['chat'].append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Analisando..."):
-                    resp = get_gemini_response(api_key, prompt, mode=mode_map[mode])
+                with st.spinner("Pensando..."):
+                    resp = get_gemini_response(prompt, mode=mode_map[mode])
                     st.markdown(resp)
                     st.session_state['chat'].append({"role": "assistant", "content": resp})
 
-    # ARQUIVOS
     with tab2:
-        uploaded = st.file_uploader("Upload de Documento", type=["pdf", "jpg", "png"])
+        uploaded = st.file_uploader("Upload", type=["pdf", "jpg", "png"])
         if uploaded and st.button("Analisar"):
             with st.spinner("Lendo..."):
-                bytes = uploaded.getvalue()
+                bytes_data = uploaded.getvalue()
                 mime = uploaded.type
-                resp = get_gemini_response(api_key, "Analise este documento.", image_data=bytes, mime_type=mime)
+                resp = get_gemini_response("Analise este documento.", image_data=bytes_data, mime_type=mime)
                 st.write(resp)
-
 else:
-    st.info("👈 Cole sua Chave de API na barra lateral esquerda.")
+    st.error("🚫 Falta configurar o Secrets (Passo 1)")
