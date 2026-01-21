@@ -8,8 +8,8 @@ import os
 # ==============================================================================
 st.set_page_config(page_title="Carmélio AI Studio", page_icon="⚖️", layout="wide")
 
-# 👇👇👇 LINHA 12: COLE SUA CHAVE NOVA AQUI DENTRO DAS ASPAS 👇👇👇
-CHAVE_FIXA = "AIzaSyCwu8EgBD7Xu3gcZHrwILA_2nyUW1ic0us"
+# 👇👇👇 SUA CHAVE ESTÁ AQUI (ESTÁ CORRETO) 👇👇👇
+CHAVE_FIXA = "AIzaSyB9I89shzZjx6jTP0mrRjeGuUEJdGG0MRw"
 
 st.markdown("""
 <style>
@@ -64,7 +64,7 @@ st.title("⚖️ Carmélio AI Studio")
 
 with st.sidebar:
     if "AIza" in CHAVE_FIXA:
-        st.success("🔐 Chave Conectada (Linha 12)")
+        st.success("🔐 Chave Conectada")
     else:
         st.error("⚠️ Sem Chave (Edite a Linha 12)")
         
