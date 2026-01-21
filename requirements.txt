@@ -1,6 +1,5 @@
 streamlit
-groq
+google-generativeai>=0.7.2
 fpdf
-yt-dlp
 graphviz
-google-generativeai
+yt-dlp
