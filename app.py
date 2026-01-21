@@ -3,6 +3,7 @@ from groq import Groq
 from docx import Document
 from io import BytesIO
 import base64
+import os
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO E DESIGN
@@ -29,26 +30,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. FUNÇÕES IA (MIGRADO PARA GROQ - MAIS RÁPIDO E ESTÁVEL)
+# 2. FUNÇÕES IA (GROQ / LLAMA 3)
 # ==============================================================================
 def get_groq_client():
-    """Pega a chave da Groq de forma segura."""
     api_key = st.secrets.get("GROQ_API_KEY")
-    # Fallback: Tenta pegar a do Google se a da Groq não estiver definida (improvável, mas seguro)
-    if not api_key:
-        return None, "❌ Erro: Chave GROQ_API_KEY não encontrada nos Secrets."
+    if not api_key: return None, "❌ Erro: Chave GROQ_API_KEY não encontrada nos Secrets."
     return Groq(api_key=api_key), None
 
 def criar_docx(texto):
-    """Gera DOCX garantindo que não quebre."""
+    """Gera DOCX formatado."""
     try:
         if not texto or "❌" in texto: return None
         doc = Document()
-        doc.add_heading('Documento Jurídico - Carmélio AI', 0)
+        # Título
+        doc.add_heading('CONTRATO JURÍDICO', 0)
+        
         texto_limpo = str(texto).replace('\x00', '')
         for p in texto_limpo.split('\n'):
-            if p.strip(): doc.add_paragraph(p)
-        doc.add_paragraph('\n\n___________________________________\nAssinatura')
+            if p.strip(): 
+                paragraph = doc.add_paragraph(p)
+                # Tenta identificar cláusulas para negrito (básico)
+                if p.upper().startswith("CLÁUSULA") or p.upper().startswith("PARÁGRAFO"):
+                    paragraph.runs[0].bold = True
+                    
+        doc.add_paragraph('\n\n___________________________________\nAssinatura do Contratante')
+        doc.add_paragraph('\n___________________________________\nAssinatura do Contratado')
+        doc.add_paragraph('\n___________________________________\nTestemunha 1')
+        doc.add_paragraph('\n___________________________________\nTestemunha 2')
+        
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
@@ -56,55 +65,45 @@ def criar_docx(texto):
     except: return None
 
 def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="Você é um assistente útil."):
-    """Função Universal da Groq para Texto, Visão e Áudio."""
     client, erro = get_groq_client()
     if erro: return erro
 
     try:
-        # 1. TRANSCRIÇÃO DE ÁUDIO (Whisper)
         if task_type == "audio" and file_bytes:
-            # Groq precisa de um nome de arquivo para saber o formato
-            import tempfile, os
-            suffix = ".mp3" # Padrão seguro
+            import tempfile
+            suffix = ".mp3"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(file_bytes)
                 tmp_path = tmp.name
-            
             with open(tmp_path, "rb") as file:
                 transcription = client.audio.transcriptions.create(
                     file=(os.path.basename(tmp_path), file.read()),
-                    model="whisper-large-v3",
-                    response_format="text",
-                    language="pt"
+                    model="whisper-large-v3", response_format="text", language="pt"
                 )
-            os.unlink(tmp_path) # Limpa temp
+            os.unlink(tmp_path)
             return transcription
 
-        # 2. VISÃO (OCR/Leitura de Docs)
         elif task_type == "vision" and file_bytes:
             base64_image = base64.b64encode(file_bytes).decode('utf-8')
             chat_completion = client.chat.completions.create(
                 messages=[{
-                    "role": "user",
+                    "role": "user", 
                     "content": [
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                     ]
                 }],
-                model="llama-3.2-11b-vision-preview",
-                temperature=0.1,
+                model="llama-3.2-11b-vision-preview", temperature=0.1,
             )
             return chat_completion.choices[0].message.content
 
-        # 3. TEXTO (Contratos/Chat)
         else:
             chat_completion = client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                model="llama-3.3-70b-versatile", # Modelo mais inteligente atual
-                temperature=0.5,
+                model="llama-3.3-70b-versatile", temperature=0.5,
             )
             return chat_completion.choices[0].message.content
 
@@ -136,7 +135,7 @@ with st.sidebar:
     if not st.checkbox("Aceito processar dados.", value=True): st.stop()
 
 # ==============================================================================
-# 5. TELAS
+# 5. TELAS DO SISTEMA
 # ==============================================================================
 if st.session_state.pagina_atual == 'home':
     st.title("🏛️ Painel de Ferramentas")
@@ -144,12 +143,12 @@ if st.session_state.pagina_atual == 'home':
     with c1:
         st.info("🤖 **Mentor Jurídico**"); st.caption("Tira-dúvidas e Correção.")
         if st.button("ACESSAR MENTOR"): navegar_para('mentor')
-        st.write(""); st.success("📝 **Gerador de Contratos**"); st.caption("Minutas Rápidas.")
+        st.write(""); st.success("📝 **Gerador de Contratos**"); st.caption("Modelo Personalizado.")
         if st.button("CRIAR CONTRATO"): navegar_para('contratos')
     with c2:
         st.warning("🏛️ **Cartório Digital**"); st.caption("OCR e Leitura de Docs.")
         if st.button("ABRIR CARTÓRIO"): navegar_para('cartorio')
-        st.write(""); st.error("🧠 **Bastidores**"); st.caption("Tecnologia.")
+        st.write(""); st.error("🧠 **Bastidores**"); st.caption("Tecnologia Groq.")
         if st.button("VER TÉCNICO"): navegar_para('tecnico')
     with c3:
         st.info("🎙️ **Transcrição**"); st.caption("Áudio para Texto.")
@@ -161,34 +160,69 @@ if st.session_state.pagina_atual == 'home':
     with cs2: st.markdown("### 🤝 Assessoria Jurídica\nCaso complexo? [Agende Consultoria](https://wa.me/5548920039720)")
 
 elif st.session_state.pagina_atual == 'contratos':
-    st.title("📝 Gerador de Contratos")
+    st.title("📝 Gerador de Contratos (Modelo Personalizado)")
     if st.button("⬅️ Voltar"): navegar_para('home')
     st.markdown("---")
-    t = st.selectbox("Tipo:", ["Aluguel Residencial", "Compra e Venda Veículo", "Prestação Serviços", "Honorários", "Personalizado"])
+    
+    t = st.selectbox("Tipo:", ["Aluguel Residencial", "Aluguel Comercial", "Compra e Venda", "Prestação de Serviços"])
     c1, c2 = st.columns(2)
-    a = c1.text_input("Parte A (Contratante):")
-    b = c2.text_input("Parte B (Contratado):")
-    obj = c1.text_area("Objeto:")
-    val = c2.text_area("Valor/Condições:")
-    ex = st.text_input("Extras:")
-    if st.button("🚀 GERAR MINUTA"):
+    a = c1.text_input("LOCADOR / CONTRATANTE (Nome, CPF, Endereço):")
+    b = c2.text_input("LOCATÁRIO / CONTRATADO (Nome, CPF, Endereço):")
+    obj = c1.text_area("OBJETO DO CONTRATO (Descrição do Imóvel/Serviço):")
+    val = c2.text_area("VALOR E PAGAMENTO (Ex: R$ 1.400,00 dia 20):")
+    prazo = st.text_input("PRAZO (Ex: 24 meses, Início 01/01/2025):")
+    ex = st.text_input("CLÁUSULAS EXTRAS (Opcional):")
+    
+    if st.button("🚀 GERAR MINUTA ABNT"):
         if not a or not b or not val: st.warning("Preencha as partes e valor.")
         else:
-            with st.spinner("Redigindo com Llama 3..."):
-                sys = "Você é um advogado especialista em Direito Civil Brasileiro."
-                p = f"Redija um CONTRATO DE {t} completo. PARTES: {a} e {b}. OBJETO: {obj}. VALOR: {val}. EXTRAS: {ex}. Use juridiquês formal, leis do Brasil e foro de eleição."
-                if modo_anonimo: p += " Anonimize dados pessoais."
+            with st.spinner("Redigindo com base no seu modelo..."):
+                # AQUI ESTÁ A MÁGICA: O TEMPLATE DO SEU PDF INSERIDO NO CÓDIGO
+                template_base = """
+                ESTRUTURA PADRÃO OBRIGATÓRIA (Baseada no Modelo Darlene/Manoel):
+                1. CABEÇALHO: Título em CAIXA ALTA (ex: CONTRATO DE LOCAÇÃO).
+                2. QUALIFICAÇÃO: "Os signatários deste instrumento..." com dados completos (Nome, Nacionalidade, CPF, RG, Endereço).
+                3. CLÁUSULA PRIMEIRA - DO OBJETO: Descrição detalhada do imóvel/serviço.
+                4. CLÁUSULA SEGUNDA - DO PRAZO: Duração, datas de início e fim.
+                5. CLÁUSULA TERCEIRA - DO VALOR: Valor total, parcelamento, datas de vencimento. Citar Caução se houver.
+                   - Parágrafo Único: Multa de 10% e Juros de 1% ao mês em caso de atraso.
+                6. CLÁUSULA QUARTA - REAJUSTE: Índice anual (IGPM ou INPC).
+                7. CLÁUSULA QUINTA - DESTINAÇÃO: (Comercial ou Residencial). Proibição de sublocação.
+                8. CLÁUSULA SEXTA - CONSERVAÇÃO E BENFEITORIAS: Vistoria prévia, devolução no mesmo estado, benfeitorias incorporadas sem indenização.
+                9. CLÁUSULA SÉTIMA - VISTORIA: Direito do Locador vistoriar. Prazo de 5 dias para reparos.
+                10. CLÁUSULA OITAVA - DO FORO: Eleição da comarca local.
+                11. FECHAMENTO: "E por estarem justos e contratados...", Cidade, Data.
+                12. ASSINATURAS: Linhas para Locador, Locatário e 2 Testemunhas.
+                """
                 
-                r = processar_ia(p, task_type="text", system_instruction=sys)
+                prompt = f"""
+                Atue como um Tabelião Jurídico. Redija um {t} seguindo RIGOROSAMENTE a estrutura abaixo:
+                
+                {template_base}
+                
+                DADOS DO CASO REAL:
+                - LOCADOR: {a}
+                - LOCATÁRIO: {b}
+                - OBJETO: {obj}
+                - VALOR: {val}
+                - PRAZO: {prazo}
+                - EXTRAS: {ex}
+                
+                Se houver dados faltando (como RG ou Endereço exato), deixe um espaço entre colchetes [PREENCHER] para o usuário completar depois.
+                """
+                
+                if modo_anonimo: prompt += " SUBSTITUA NOMES REAIS POR [NOME]."
+                
+                r = processar_ia(prompt, task_type="text")
                 st.write(r)
                 docx = criar_docx(r)
-                if docx: st.download_button("💾 Baixar DOCX", docx, f"Contrato_{t}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                if docx: st.download_button("💾 Baixar Minuta (.docx)", docx, f"Contrato_{t}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 elif st.session_state.pagina_atual == 'mentor':
     st.title("🤖 Mentor Jurídico")
     if st.button("⬅️ Voltar"): navegar_para('home')
     modo = st.radio("Perfil:", ["OAB (Rigoroso)", "PCSC (Policial)"], horizontal=True)
-    sys = "Atue como examinador da OAB, cite artigos." if "OAB" in modo else "Atue como mentor policial focado em Penal e Administrativo."
+    sys = "Atue como examinador da OAB, cite artigos." if "OAB" in modo else "Atue como mentor policial focado em Penal."
     if 'chat' not in st.session_state: st.session_state.chat = []
     for m in st.session_state.chat: st.chat_message(m['role']).write(m['content'])
     if p:=st.chat_input("Dúvida..."):
@@ -231,5 +265,4 @@ elif st.session_state.pagina_atual == 'audio':
 elif st.session_state.pagina_atual == 'tecnico':
     st.title("🧠 Bastidores")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    st.success("Sistema atualizado para engine **Groq (Llama 3.3)** - Alta velocidade.")
-    st.code("client = Groq(api_key=secrets['GROQ_API_KEY'])\nmodel = 'llama-3.3-70b-versatile'", language="python")
+    st.success("Sistema rodando na Groq com Llama 3 (Template Personalizado).")
