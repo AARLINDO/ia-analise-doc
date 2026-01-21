@@ -48,9 +48,6 @@ st.markdown("""
     
     /* Inputs de Texto */
     .stTextInput>div>div>input { color: white; background-color: #262730; border: 1px solid #444; }
-    
-    /* Rodapé LGPD */
-    .lgpd-footer { font-size: 12px; color: #666; text-align: center; margin-top: 50px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,14 +101,14 @@ with st.sidebar:
 
     st.markdown("### 🏛️ Carmélio Suite")
     
-    # MENU PRINCIPAL
+    # MENU PRINCIPAL (COM AS 4 OPÇÕES)
     pagina = st.radio(
         "Navegação:", 
         [
             "🎓 Sala de Estudos", 
             "🏛️ Cartório (Inteiro Teor)", 
             "🎙️ Transcritor de Áudio",
-            "🧠 Como Funciona (Técnico)"
+            "🧠 Como Funciona (Técnico)" # <--- AQUI ESTÁ A ABA TÉCNICA
         ],
         index=0
     )
@@ -219,7 +216,7 @@ elif pagina == "🎙️ Transcritor de Áudio":
                 st.download_button("💾 Baixar Word (.docx)", docx, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 # ==============================================================================
-# MÓDULO 4: TÉCNICO
+# MÓDULO 4: TÉCNICO (EXPLICAÇÃO)
 # ==============================================================================
 elif pagina == "🧠 Como Funciona (Técnico)":
     st.title("🧠 Arquitetura do Sistema")
@@ -235,28 +232,35 @@ elif pagina == "🧠 Como Funciona (Técnico)":
     
     with col_a:
         st.success("""
-        **1. Motor de IA (Google Gemini 1.5/2.0)**
+        **1. Motor de IA (Google Gemini)**
         
         * Utiliza redes neurais **Transformers** para entender o contexto jurídico completo.
         * **Tokens:** O modelo processa milhares de tokens por segundo, permitindo ler processos inteiros de uma vez.
+        * **OCR Neural:** Consegue ler letra de mão em livros de cartório antigos.
         """)
     with col_b:
         st.warning("""
         **2. Camada de Segurança (LGPD)**
         
         * **Stateless:** O sistema não salva seus dados. Ao fechar a aba, tudo é deletado da memória RAM.
-        * **Anonimização:** Algoritmo que detecta e mascara Nomes e CPFs quando solicitado.
+        * **Anonimização:** Algoritmo que detecta e mascara Nomes e CPFs quando solicitado na barra lateral.
         """)
         
     st.markdown("---")
     st.subheader("👨‍💻 Exemplo de Código (Treinamento)")
+    st.markdown("Este é um exemplo didático de como IAs como esta são treinadas:")
     st.code("""
 # Exemplo de Arquitetura Transformer (Simplificado)
-model = genai.GenerativeModel('gemini-flash-latest')
+import tensorflow as tf
+from transformers import GPT2LMHeadModel
 
-# Processamento Seguro
-def processar_juridico(dados):
+# 1. Carregamento do Modelo Neural
+model = GPT2LMHeadModel.from_pretrained("gpt2")
+
+# 2. Processamento Seguro
+def processar_juridico(dados_processo):
     # O dado é enviado criptografado
-    response = model.generate_content(dados)
-    return response.text
+    # A IA analisa o contexto (ex: "Deferimento", "Liminar")
+    decisao = model.generate(dados_processo)
+    return decisao
     """, language="python")
