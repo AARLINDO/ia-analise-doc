@@ -4,7 +4,7 @@ from docx import Document
 from io import BytesIO
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E DESIGN "DASHBOARD JURIS"
+# 1. CONFIGURAÇÃO E DESIGN
 # ==============================================================================
 st.set_page_config(page_title="Carmélio AI Suite", page_icon="⚖️", layout="wide")
 
@@ -28,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. FUNÇÕES IA (AGORA BLINDADAS)
+# 2. FUNÇÕES IA (AGORA COM AUTO-CORREÇÃO DE MODELO)
 # ==============================================================================
 def criar_docx(texto):
     """Gera DOCX garantindo que não quebre com caracteres estranhos."""
@@ -46,38 +46,47 @@ def criar_docx(texto):
         return buffer
     except: return None
 
+def try_generate(model_name, content, sys_inst):
+    """Tenta gerar conteúdo com um modelo específico."""
+    model = genai.GenerativeModel(model_name, system_instruction=sys_inst)
+    return model.generate_content(content)
+
 def get_gemini_response(prompt, file_data=None, mime_type=None, system_instruction=None, anonimizar=False):
-    """Conecta ao Gemini tratando Texto e Arquivos de forma separada para evitar erros."""
+    """Conecta ao Gemini e tenta modelos diferentes se um falhar."""
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key: return "❌ ERRO: Configure a GOOGLE_API_KEY nos Secrets."
         
         genai.configure(api_key=api_key)
         
-        # Instruções de Sistema
+        # Instruções
         sys_inst = system_instruction if system_instruction else "Você é um assistente jurídico útil e preciso."
-        if anonimizar: sys_inst += "\n\nREGRA LGPD: Substitua nomes reais por [NOME], CPFs por [CPF] e endereços por [ENDEREÇO]."
+        if anonimizar: sys_inst += "\n\nREGRA LGPD: Substitua nomes reais por [NOME], CPFs por [CPF]."
         
-        # Configura o Modelo
-        model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=sys_inst)
-        
-        # LÓGICA DE ENVIO SEPARADA (O SEGREDO DO FIX)
+        # Prepara o conteúdo (Texto ou Misto)
         if file_data:
-            # Se tem arquivo, cria a lista mista
             content = [prompt, {"mime_type": mime_type, "data": file_data}]
-            response = model.generate_content(content)
         else:
-            # Se é só texto (Contratos/Chat), envia a string direta. 
-            # Isso impede que o Gemini ache que a lista está vazia ou mal formatada.
-            response = model.generate_content(prompt)
-            
-        return response.text
+            content = prompt
+
+        # TENTATIVA 1: Modelo Flash (Mais rápido)
+        try:
+            response = try_generate("gemini-1.5-flash", content, sys_inst)
+            return response.text
+        except Exception as e_flash:
+            # TENTATIVA 2: Modelo Pro (Backup se o Flash falhar)
+            try:
+                response = try_generate("gemini-1.5-pro", content, sys_inst)
+                return response.text
+            except:
+                # Retorna o erro original se ambos falharem
+                return f"❌ Erro na IA (Tentativa Flash falhou): {str(e_flash)}"
         
     except Exception as e:
-        return f"❌ Erro Técnico na IA: {str(e)}"
+        return f"❌ Erro Crítico: {str(e)}"
 
 # ==============================================================================
-# 3. GERENCIAMENTO DE ESTADO E NAVEGAÇÃO
+# 3. NAVEGAÇÃO
 # ==============================================================================
 if 'pagina_atual' not in st.session_state: st.session_state.pagina_atual = 'home'
 def navegar_para(pagina): st.session_state.pagina_atual = pagina; st.rerun()
@@ -101,7 +110,7 @@ with st.sidebar:
     if not st.checkbox("Aceito processar dados.", value=True): st.stop()
 
 # ==============================================================================
-# 5. TELAS DO SISTEMA
+# 5. TELAS
 # ==============================================================================
 if st.session_state.pagina_atual == 'home':
     st.title("🏛️ Painel de Ferramentas")
@@ -119,7 +128,6 @@ if st.session_state.pagina_atual == 'home':
     with c3:
         st.info("🎙️ **Transcrição**"); st.caption("Áudio para Texto.")
         if st.button("TRANSCREVER"): navegar_para('audio')
-
     st.markdown("---")
     st.subheader("Precisa de um Humano?")
     cs1, cs2 = st.columns(2)
@@ -137,7 +145,6 @@ elif st.session_state.pagina_atual == 'contratos':
     obj = c1.text_area("Objeto:")
     val = c2.text_area("Valor/Condições:")
     ex = st.text_input("Extras:")
-    
     if st.button("🚀 GERAR MINUTA"):
         if not a or not b or not val: st.warning("Preencha as partes e valor.")
         else:
@@ -153,10 +160,8 @@ elif st.session_state.pagina_atual == 'mentor':
     if st.button("⬅️ Voltar"): navegar_para('home')
     modo = st.radio("Perfil:", ["OAB (Rigoroso)", "PCSC (Policial)"], horizontal=True)
     sys = "Seja examinador da OAB." if "OAB" in modo else "Seja mentor policial focado em Penal."
-    
     if 'chat' not in st.session_state: st.session_state.chat = []
     for m in st.session_state.chat: st.chat_message(m['role']).write(m['content'])
-    
     if p:=st.chat_input("Dúvida..."):
         st.session_state.chat.append({"role":"user", "content":p})
         st.chat_message("user").write(p)
@@ -196,4 +201,4 @@ elif st.session_state.pagina_atual == 'audio':
 elif st.session_state.pagina_atual == 'tecnico':
     st.title("🧠 Bastidores")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    st.info("Sistema rodando Google Gemini 1.5 Flash.")
+    st.info("Sistema rodando Google Gemini 1.5.")
