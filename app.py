@@ -6,15 +6,17 @@ from io import BytesIO
 # ==============================================================================
 # 1. CONFIGURAÇÃO VISUAL & ESTILO
 # ==============================================================================
-st.set_page_config(page_title="Carmélio AI Super", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Carmélio AI Mobile", page_icon="⚖️", layout="wide")
 
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; }
-    .stButton>button { background: linear-gradient(90deg, #4285F4, #9B72CB); color: white; border: none; font-weight: bold; }
+    .stButton>button { background: linear-gradient(90deg, #4285F4, #9B72CB); color: white; border: none; font-weight: bold; height: 50px; }
     h1, h2, h3 { color: #E0E0E0; }
     .stSuccess, .stInfo, .stWarning { border-radius: 8px; }
-    .stFileUploader { padding: 20px; border: 1px dashed #4285F4; border-radius: 10px; }
+    .stFileUploader { padding: 10px; border: 1px dashed #4285F4; border-radius: 10px; }
+    /* Ajuste para celular */
+    div[data-testid="stAudioInput"] { background-color: #1e1e1e; border-radius: 10px; padding: 10px; border: 1px solid #4285F4; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,14 +44,13 @@ def get_gemini_response(prompt, file_data=None, mime_type=None, mode="padrao"):
 
     personas = {
         "padrao": """
-            Você é o Carmélio, um assistente jurídico de elite e especialista em cartórios.
-            SUAS HABILIDADES:
-            1. ÁUDIO/IMAGEM: Transcreva fielmente (Inteiro Teor). Use formatação formal de cartório.
-            2. PERGUNTAS: Responda com base na lei, citando artigos quando necessário.
-            3. FORMATAÇÃO: Use tópicos e parágrafos claros para facilitar a leitura.
+            Você é o Carmélio, assistente jurídico de elite (Advogado e Escrivão).
+            - ÁUDIO/DITADO: Transcreva fielmente. Se for ditado de peça, formate como peça jurídica.
+            - IMAGEM: Transcrição de Inteiro Teor.
+            - TEXTO: Respostas diretas e fundamentadas na lei brasileira.
         """,
-        "oab": "ATUE COMO: Examinador da OAB. Corrija peças, aponte erros e exija fundamentação (Art. 840 CLT).",
-        "pcsc": "ATUE COMO: Mentor PCSC. Foque em Inquérito Policial, Prisões e pegadinhas da banca."
+        "oab": "ATUE COMO: Examinador da OAB. Corrija peças e exija fundamentação (Art. 840 CLT).",
+        "pcsc": "ATUE COMO: Mentor PCSC. Foque em Inquérito Policial e Prisões."
     }
     
     model_name = "gemini-flash-latest"
@@ -58,8 +59,7 @@ def get_gemini_response(prompt, file_data=None, mime_type=None, mode="padrao"):
     if file_data:
         content.append({"mime_type": mime_type, "data": file_data})
         if not prompt:
-            if "audio" in mime_type: prompt = "Transcreva este áudio em formato de termo formal."
-            elif "image" in mime_type: prompt = "Transcreva o texto desta imagem (Inteiro Teor)."
+            prompt = "Transcreva este conteúdo detalhadamente (Inteiro Teor/Ditado)."
     
     if prompt: content.append(prompt)
 
@@ -68,88 +68,77 @@ def get_gemini_response(prompt, file_data=None, mime_type=None, mode="padrao"):
         response = model.generate_content(content)
         return response.text
     except Exception as e:
-        return f"❌ Erro ao processar: {str(e)}"
+        return f"❌ Erro: {str(e)}"
 
 # ==============================================================================
-# 3. INTERFACE
+# 3. INTERFACE MOBILE FIRST
 # ==============================================================================
-st.title("⚖️ Carmélio AI Super")
+st.title("⚖️ Carmélio AI")
 
 if "GOOGLE_API_KEY" in st.secrets:
     with st.sidebar:
-        st.success("✅ Sistema Online")
-        st.info("🎧 Ouvidos Ativos\n👁️ Visão Ativa\n📄 Exportação Word")
-        st.divider()
-        
+        st.info("📱 Modo Mobile Ativo")
         mode = st.radio("Modo:", ["🤖 Geral/Cartório", "⚖️ OAB", "🚓 PCSC"])
         mode_map = {"🤖 Geral/Cartório": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
         
-        if st.button("🗑️ Limpar Tudo"):
+        if st.button("🗑️ Nova Consulta"):
             st.session_state['chat'] = []
             st.rerun()
 
         st.markdown("---")
-        st.markdown("<div style='text-align: center; color: #808080;'><small>Desenvolvido por</small><br><b style='color: #E0E0E0;'>Arthur Carmélio</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; color: #808080;'><small>Dev. Arthur Carmélio</small></div>", unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["💬 Chat & Texto", "📂 Analisador (Foto/Áudio)"])
+    tab1, tab2 = st.tabs(["🎤 Gravar/Falar", "💬 Chat & Upload"])
 
-    # ABA 1: CHAT
+    # ABA 1: GRAVADOR RÁPIDO (Ideal para celular)
     with tab1:
+        st.markdown("### 🎙️ Ditado Jurídico")
+        st.caption("Clique no microfone para ditar uma peça ou certidão.")
+        
+        # O NOVO COMPONENTE DE ÁUDIO DO STREAMLIT
+        audio_gravado = st.audio_input("Toque para gravar")
+        
+        if audio_gravado:
+            with st.spinner("Ouvindo e transcrevendo..."):
+                # Processa o áudio gravado na hora
+                bytes_data = audio_gravado.getvalue()
+                mime = "audio/wav" # O navegador grava em wav geralmente
+                
+                resp = get_gemini_response("Transcreva este ditado.", file_data=bytes_data, mime_type=mime, mode=mode_map[mode])
+                
+                st.success("✅ Transcrição Concluída:")
+                st.write(resp)
+                
+                # Baixar Word
+                docx = criar_docx(resp)
+                st.download_button("📄 Baixar Word", docx, "Ditado.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    # ABA 2: CHAT E UPLOAD DE ARQUIVOS
+    with tab2:
+        # Chat
         if 'chat' not in st.session_state: st.session_state['chat'] = []
         for msg in st.session_state['chat']:
             with st.chat_message(msg['role'], avatar="👤" if msg['role'] == "user" else "⚖️"):
                 st.markdown(msg['content'])
         
-        if prompt := st.chat_input("Digite sua dúvida..."):
+        if prompt := st.chat_input("Digite ou pergunte..."):
             st.session_state['chat'].append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Carmélio pensando..."):
+                with st.spinner("Processando..."):
                     resp = get_gemini_response(prompt, mode=mode_map[mode])
                     st.markdown(resp)
                     st.session_state['chat'].append({"role": "assistant", "content": resp})
                     
-                    # BOTÃO DE DOWNLOAD WORD NO CHAT
-                    docx_file = criar_docx(resp)
-                    st.download_button(
-                        label="📄 Baixar Resposta em Word",
-                        data=docx_file,
-                        file_name="Resposta_Carmelio.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-
-    # ABA 2: UPLOAD
-    with tab2:
-        st.markdown("### 📤 Envie Documentos ou Áudios")
-        uploaded = st.file_uploader("Arraste o arquivo aqui", type=["jpg", "png", "jpeg", "pdf", "mp3", "wav", "m4a", "ogg"])
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            user_instrucao = st.text_input("Instrução extra:", placeholder="Ex: Transcreva em inteiro teor...")
-        with col2:
-            st.write("") 
-            st.write("") 
-            processar = st.button("🚀 Processar", use_container_width=True)
-
-        if uploaded and processar:
-            with st.spinner("⏳ Analisando..."):
+        st.markdown("---")
+        # Upload Clássico
+        uploaded = st.file_uploader("📎 Anexar Foto/PDF", type=["jpg", "png", "pdf", "mp3"])
+        if uploaded and st.button("Analisar Anexo"):
+            with st.spinner("Lendo..."):
                 bytes_data = uploaded.getvalue()
                 mime = uploaded.type
-                resp = get_gemini_response(user_instrucao, file_data=bytes_data, mime_type=mime, mode=mode_map[mode])
-                
-                st.divider()
-                st.markdown("### 📋 Resultado:")
+                resp = get_gemini_response("Analise este anexo.", file_data=bytes_data, mime_type=mime, mode=mode_map[mode])
                 st.write(resp)
-                
-                # BOTÃO DE DOWNLOAD WORD NO UPLOAD
-                docx_file = criar_docx(resp)
-                st.download_button(
-                    label="📄 Baixar Transcrição em Word",
-                    data=docx_file,
-                    file_name="Transcricao_Carmelio.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="btn_upload_word"
-                )
 
 else:
     st.error("🚫 Chave não encontrada no Secrets.")
