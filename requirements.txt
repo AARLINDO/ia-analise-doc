@@ -6,4 +6,6 @@ yt-dlp
 python-docx
 streamlit
 google-generativeai
+google-generativeai>=0.7.2
+
 
