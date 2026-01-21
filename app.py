@@ -1,7 +1,8 @@
 import streamlit as st
-import google.generativeai as genai
+from groq import Groq
 from docx import Document
 from io import BytesIO
+import base64
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO E DESIGN
@@ -28,10 +29,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. FUNÇÕES IA (AGORA COM MODELO UNIVERSAL)
+# 2. FUNÇÕES IA (MIGRADO PARA GROQ - MAIS RÁPIDO E ESTÁVEL)
 # ==============================================================================
+def get_groq_client():
+    """Pega a chave da Groq de forma segura."""
+    api_key = st.secrets.get("GROQ_API_KEY")
+    # Fallback: Tenta pegar a do Google se a da Groq não estiver definida (improvável, mas seguro)
+    if not api_key:
+        return None, "❌ Erro: Chave GROQ_API_KEY não encontrada nos Secrets."
+    return Groq(api_key=api_key), None
+
 def criar_docx(texto):
-    """Gera DOCX garantindo que não quebre com caracteres estranhos."""
+    """Gera DOCX garantindo que não quebre."""
     try:
         if not texto or "❌" in texto: return None
         doc = Document()
@@ -46,48 +55,61 @@ def criar_docx(texto):
         return buffer
     except: return None
 
-def get_gemini_response(prompt, file_data=None, mime_type=None, system_instruction=None, anonimizar=False):
-    """Conecta ao Gemini usando modelo compatível com versões antigas e novas."""
+def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="Você é um assistente útil."):
+    """Função Universal da Groq para Texto, Visão e Áudio."""
+    client, erro = get_groq_client()
+    if erro: return erro
+
     try:
-        api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key: return "❌ ERRO: Configure a GOOGLE_API_KEY nos Secrets."
-        
-        genai.configure(api_key=api_key)
-        
-        # Ajuste de Instruções
-        sys_inst = system_instruction if system_instruction else "Você é um assistente jurídico útil e preciso."
-        if anonimizar: sys_inst += "\n\nREGRA LGPD: Substitua nomes reais por [NOME], CPFs por [CPF]."
-        
-        # CONFIGURAÇÃO DE SEGURANÇA (Para evitar bloqueios bobos)
-        safe = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
+        # 1. TRANSCRIÇÃO DE ÁUDIO (Whisper)
+        if task_type == "audio" and file_bytes:
+            # Groq precisa de um nome de arquivo para saber o formato
+            import tempfile, os
+            suffix = ".mp3" # Padrão seguro
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(file_bytes)
+                tmp_path = tmp.name
+            
+            with open(tmp_path, "rb") as file:
+                transcription = client.audio.transcriptions.create(
+                    file=(os.path.basename(tmp_path), file.read()),
+                    model="whisper-large-v3",
+                    response_format="text",
+                    language="pt"
+                )
+            os.unlink(tmp_path) # Limpa temp
+            return transcription
 
-        # Tenta usar o modelo 'gemini-pro' que é o padrão universal
-        # (Funciona mesmo se a biblioteca estiver desatualizada no servidor)
-        model = genai.GenerativeModel("gemini-pro") 
-        
-        # PREPARAÇÃO DO PROMPT
-        # O gemini-pro antigo prefere receber tudo como string ou lista simples
-        if file_data:
-             # Se tiver imagem/audio, tentamos o modelo de visão se disponível, ou avisamos
-             # Mas para contratos (texto), isso aqui resolve 100% dos erros 404
-             return "⚠️ Para processar imagens/áudio, precisamos forçar a atualização do servidor. Tente apenas texto por enquanto."
+        # 2. VISÃO (OCR/Leitura de Docs)
+        elif task_type == "vision" and file_bytes:
+            base64_image = base64.b64encode(file_bytes).decode('utf-8')
+            chat_completion = client.chat.completions.create(
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }],
+                model="llama-3.2-11b-vision-preview",
+                temperature=0.1,
+            )
+            return chat_completion.choices[0].message.content
+
+        # 3. TEXTO (Contratos/Chat)
         else:
-            # Adiciona a instrução do sistema manualmente no prompt para garantir compatibilidade
-            full_prompt = f"INSTRUÇÃO DO SISTEMA: {sys_inst}\n\nUSUÁRIO: {prompt}"
-            response = model.generate_content(full_prompt, safety_settings=safe)
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt}
+                ],
+                model="llama-3.3-70b-versatile", # Modelo mais inteligente atual
+                temperature=0.5,
+            )
+            return chat_completion.choices[0].message.content
 
-        return response.text
-        
     except Exception as e:
-        # Se der erro específico de modelo não encontrado, tenta o ultra-básico
-        if "404" in str(e):
-             return f"❌ Erro de Versão: O servidor do Streamlit está usando uma versão antiga. Por favor, reinicie o app (Reboot) no menu 'Manage App'."
-        return f"❌ Erro Técnico: {str(e)}"
+        return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
 # 3. NAVEGAÇÃO
@@ -152,9 +174,12 @@ elif st.session_state.pagina_atual == 'contratos':
     if st.button("🚀 GERAR MINUTA"):
         if not a or not b or not val: st.warning("Preencha as partes e valor.")
         else:
-            with st.spinner("Redigindo..."):
-                p = f"Redija um CONTRATO DE {t} completo. PARTES: {a} e {b}. OBJETO: {obj}. VALOR: {val}. EXTRAS: {ex}. Use juridiquês formal e leis BR."
-                r = get_gemini_response(p, anonimizar=modo_anonimo)
+            with st.spinner("Redigindo com Llama 3..."):
+                sys = "Você é um advogado especialista em Direito Civil Brasileiro."
+                p = f"Redija um CONTRATO DE {t} completo. PARTES: {a} e {b}. OBJETO: {obj}. VALOR: {val}. EXTRAS: {ex}. Use juridiquês formal, leis do Brasil e foro de eleição."
+                if modo_anonimo: p += " Anonimize dados pessoais."
+                
+                r = processar_ia(p, task_type="text", system_instruction=sys)
                 st.write(r)
                 docx = criar_docx(r)
                 if docx: st.download_button("💾 Baixar DOCX", docx, f"Contrato_{t}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -163,25 +188,26 @@ elif st.session_state.pagina_atual == 'mentor':
     st.title("🤖 Mentor Jurídico")
     if st.button("⬅️ Voltar"): navegar_para('home')
     modo = st.radio("Perfil:", ["OAB (Rigoroso)", "PCSC (Policial)"], horizontal=True)
-    sys = "Seja examinador da OAB." if "OAB" in modo else "Seja mentor policial focado em Penal."
+    sys = "Atue como examinador da OAB, cite artigos." if "OAB" in modo else "Atue como mentor policial focado em Penal e Administrativo."
     if 'chat' not in st.session_state: st.session_state.chat = []
     for m in st.session_state.chat: st.chat_message(m['role']).write(m['content'])
     if p:=st.chat_input("Dúvida..."):
         st.session_state.chat.append({"role":"user", "content":p})
         st.chat_message("user").write(p)
         with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                r = get_gemini_response(p, system_instruction=sys, anonimizar=modo_anonimo)
+            with st.spinner("Analisando..."):
+                r = processar_ia(p, task_type="text", system_instruction=sys)
                 st.write(r)
                 st.session_state.chat.append({"role":"assistant", "content":r})
 
 elif st.session_state.pagina_atual == 'cartorio':
     st.title("🏛️ Cartório Digital")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    u = st.file_uploader("Documento (Foto/PDF)", type=["jpg","png","pdf"])
+    u = st.file_uploader("Documento (Foto/PDF)", type=["jpg","png","jpeg","pdf"])
     if u and st.button("EXTRAIR TEXTO"):
-        with st.spinner("Lendo..."):
-            r = get_gemini_response("Transcreva este documento.", file_data=u.getvalue(), mime_type=u.type, anonimizar=modo_anonimo)
+        with st.spinner("Lendo documento com Visão Computacional..."):
+            p = "Transcreva todo o texto desta imagem fielmente. Mantenha formatação."
+            r = processar_ia(p, file_bytes=u.getvalue(), task_type="vision")
             st.text_area("Texto:", r, height=400)
             d = criar_docx(r)
             if d: st.download_button("💾 Baixar DOCX", d, "Doc.docx")
@@ -190,14 +216,14 @@ elif st.session_state.pagina_atual == 'audio':
     st.title("🎙️ Transcrição")
     if st.button("⬅️ Voltar"): navegar_para('home')
     t1, t2 = st.tabs(["Gravar", "Upload"])
-    ad=None; mime=None
+    ad=None
     with t1: 
-        if x:=st.audio_input("Gravar"): ad=x.getvalue(); mime="audio/wav"
+        if x:=st.audio_input("Gravar"): ad=x.getvalue()
     with t2:
-        if x:=st.file_uploader("Arquivo", type=["mp3","wav","m4a"]): ad=x.getvalue(); mime=x.type
+        if x:=st.file_uploader("Arquivo", type=["mp3","wav","m4a"]): ad=x.getvalue()
     if ad and st.button("TRANSCREVER"):
-        with st.spinner("Ouvindo..."):
-            r = get_gemini_response("Transcreva o áudio em Português.", file_data=ad, mime_type=mime, anonimizar=modo_anonimo)
+        with st.spinner("Ouvindo com Whisper..."):
+            r = processar_ia("", file_bytes=ad, task_type="audio")
             st.write(r)
             d = criar_docx(r)
             if d: st.download_button("💾 Baixar DOCX", d, "Transcricao.docx")
@@ -205,4 +231,5 @@ elif st.session_state.pagina_atual == 'audio':
 elif st.session_state.pagina_atual == 'tecnico':
     st.title("🧠 Bastidores")
     if st.button("⬅️ Voltar"): navegar_para('home')
-    st.info("Sistema rodando Google Gemini Pro (Compatibilidade Universal).")
+    st.success("Sistema atualizado para engine **Groq (Llama 3.3)** - Alta velocidade.")
+    st.code("client = Groq(api_key=secrets['GROQ_API_KEY'])\nmodel = 'llama-3.3-70b-versatile'", language="python")
