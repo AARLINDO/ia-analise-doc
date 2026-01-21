@@ -99,15 +99,15 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     except Exception as e: return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 3. BARRA LATERAL (COM LOGO NOVA)
+# 3. BARRA LATERAL (COM LOGO CORRIGIDA)
 # ==============================================================================
 with st.sidebar:
     # --- LOGO OFICIAL ---
-    # Tenta carregar a imagem 'logo.jpg'. Se não achar, mostra um texto.
+    # Ajustado para ler 'logo.jpg.png' conforme o upload no GitHub
     try:
-        st.image("logo.jpg", use_container_width=True)
+        st.image("logo.jpg.png", use_container_width=True)
     except:
-        st.warning("⚠️ Imagem 'logo.jpg' não encontrada.")
+        st.warning("⚠️ Logo não encontrada. Verifique se o arquivo 'logo.jpg.png' está no GitHub.")
 
     # --- CARD DE PERFIL ---
     st.markdown("""
