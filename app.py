@@ -16,7 +16,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# LÓGICA DO GEMINI 2.0
+# LÓGICA DO GEMINI 2.0 (MODERNO)
 # ==============================================================================
 def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
     # 1. PEGA A CHAVE DO COFRE
@@ -28,14 +28,13 @@ def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None
 
     # 2. DEFINE AS PERSONAS
     personas = {
-        "padrao": "Você é um assistente jurídico de elite, atualizado com as leis brasileiras.",
+        "padrao": "Você é um assistente jurídico de elite, especialista em leis brasileiras.",
         "oab": "ATUE COMO: Examinador da OAB (2ª Fase Trabalho). Seja rigoroso. Exija fundamentação (Art. 840 CLT, Súmulas).",
         "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito Policial, Prisões e pegadinhas da banca FGV/Cebraspe."
     }
     
-    # 3. MODELO CORRETO (Encontrado no seu Scanner)
-    # Usando o Gemini 2.0 Flash que apareceu na sua lista
-    model_name = "gemini-2.0-flash"
+    # 3. USA O MODELO 2.0 (Que seu Scanner achou!)
+    model_name = "gemini-2.0-flash" 
     
     # Prepara o conteúdo
     content = [prompt]
@@ -61,7 +60,7 @@ st.title("⚖️ Carmélio AI Studio 2.0")
 # Verifica conexão visualmente
 if "GOOGLE_API_KEY" in st.secrets:
     with st.sidebar:
-        st.success(f"✅ Conectado: Gemini 2.0 Flash")
+        st.success(f"✅ Conectado: Gemini 2.0")
         st.divider()
         mode = st.radio("Modo de Estudo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
         mode_map = {"🤖 Geral": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
@@ -82,7 +81,7 @@ if "GOOGLE_API_KEY" in st.secrets:
             st.session_state['chat'].append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Processando com Gemini 2.0..."):
+                with st.spinner("Gemini 2.0 pensando..."):
                     resp = get_gemini_response(prompt, mode=mode_map[mode])
                     st.markdown(resp)
                     st.session_state['chat'].append({"role": "assistant", "content": resp})
