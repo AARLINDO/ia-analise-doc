@@ -318,3 +318,4 @@ with tab4:
             except Exception as e:
                 status.update(label="Erro!", state="error")
                 st.error(f"Ocorreu um erro: {str(e)}")
+
