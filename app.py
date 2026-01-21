@@ -22,7 +22,7 @@ st.markdown("""
 def get_api_key():
     # Tenta pegar do Cofre (Secrets) para não precisar digitar
     try:
-        return st.secrets["GOOGLE_API_KEY"]
+        return st.secrets["AIzaSyCwu8EgBD7Xu3gcZHrwILA_2nyUW1ic0us"]
     except:
         # Se não tiver no cofre, pede na barra lateral (Fallback)
         return None
@@ -116,3 +116,4 @@ if api_key:
                 st.write(resp)
 else:
     st.info("👈 Configure sua chave no menu 'Manage App > Settings > Secrets' para não precisar digitar sempre.")
+
