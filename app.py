@@ -9,7 +9,7 @@ from pathlib import Path
 # 1. CONFIGURAÇÃO E CHAVE (FIXA)
 # ==============================================================================
 # 👇 COLE SUA CHAVE AQUI DENTRO DAS ASPAS (Apague o texto anterior)
-CHAVE_MESTRA = "AIzaSyDKSC9mAkeodr96m6SgcCvn70uZHseiM4A" 
+CHAVE_MESTRA = "AIzaSyCwu8EgBD7Xu3gcZHrwILA_2nyUW1ic0us" 
 
 st.set_page_config(page_title="Carmélio AI Studio", page_icon="⚖️", layout="wide")
 
@@ -189,3 +189,4 @@ if config_gemini():
                     status.update(label="Concluído!", state="complete")
                 else:
                     st.error(f"Erro ao baixar vídeo: {title}")
+
