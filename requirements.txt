@@ -4,3 +4,6 @@ fpdf
 graphviz
 yt-dlp
 python-docx
+streamlit
+google-generativeai
+
