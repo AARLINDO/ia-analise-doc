@@ -6,18 +6,12 @@ import base64
 import os
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E SEO (VISIBILIDADE NO GOOGLE)
+# 1. CONFIGURAÇÃO E SEO
 # ==============================================================================
-# Aqui definimos o Título que aparece na aba do navegador e para o Google
 st.set_page_config(
-    page_title="Carmélio AI | Assistente Jurídico, Contratos e Estudos OAB",
+    page_title="Carmélio AI | Assistente Jurídico",
     page_icon="⚖️",
-    layout="wide",
-    menu_items={
-        'Get Help': 'https://www.linkedin.com/in/arthurcarmelio/',
-        'Report a bug': "https://wa.me/5548920039720",
-        'About': "# Carmélio AI\nInteligência Artificial para Advogados e Cartórios."
-    }
+    layout="wide"
 )
 
 # CSS "Dark Mode Premium"
@@ -51,9 +45,6 @@ st.markdown("""
     }
     .profile-name { color: white; font-weight: bold; font-size: 16px; margin-top: 10px; }
     .profile-role { color: #3B82F6; font-size: 12px; margin-top: 5px; font-weight: 600; text-transform: uppercase; }
-    
-    /* SEO FOOTER (Escondido visualmente mas legível para robôs - opcional) */
-    .seo-text { font-size: 1px; color: #0E1117; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -108,13 +99,18 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     except Exception as e: return f"❌ Erro na IA: {str(e)}"
 
 # ==============================================================================
-# 3. BARRA LATERAL
+# 3. BARRA LATERAL (COM LOGO NOVA)
 # ==============================================================================
 with st.sidebar:
+    # --- LOGO OFICIAL ---
+    # Tenta carregar a imagem 'logo.jpg'. Se não achar, mostra um texto.
+    try:
+        st.image("logo.jpg", use_container_width=True)
+    except:
+        st.warning("⚠️ Imagem 'logo.jpg' não encontrada.")
+
+    # --- CARD DE PERFIL ---
     st.markdown("""
-    <div style="display: flex; justify-content: center;">
-        <img src="https://cdn-icons-png.flaticon.com/512/4140/4140048.png" width="100" style="border-radius: 50%; border: 3px solid #3B82F6;">
-    </div>
     <div class="profile-card">
         <div class="profile-name">Arthur Carmélio</div>
         <div class="profile-role">Bacharel em Direito<br>Especialista Notarial</div>
@@ -165,7 +161,7 @@ if "Mentor" in menu_opcao:
             if r:
                 st.download_button("💾 Baixar Resposta", criar_docx(r), "Parecer.docx")
 
-# --- MÓDULO 2: ÁREA DO ESTUDANTE (NOVO! FLASHCARDS & QUIZ) ---
+# --- MÓDULO 2: ÁREA DO ESTUDANTE ---
 elif "Estudante" in menu_opcao:
     st.title("🎓 Área do Estudante & Concurseiro")
     st.caption("Ferramentas de Estudo Ativo para OAB e Concursos Públicos.")
@@ -209,7 +205,6 @@ elif "Contratos" in menu_opcao:
     if st.button("🚀 Gerar Minuta"):
         if a and val:
             with st.spinner("Redigindo..."):
-                # Template Darlene/Manoel simplificado para o prompt
                 prompt = f"Atue como Tabelião. Redija um {t} completo (ABNT). LOCADOR: {a}, LOCATÁRIO: {b}, VALOR: {val}, OBJETO: {obj}. Inclua cláusulas de praxe, foro e multa."
                 r = processar_ia(prompt, task_type="text")
                 st.session_state['cont'] = r
@@ -254,11 +249,5 @@ elif "Sobre" in menu_opcao:
     **Desenvolvedor:**
     Arthur Carmélio - Bacharel em Direito e Especialista Notarial.
     """)
-    
-    # PALAVRAS-CHAVE PARA O GOOGLE (SEO VISÍVEL)
     st.divider()
-    st.caption("""
-    **Tags de Busca:** Assistente Jurídico Virtual, Inteligência Artificial para Advogados, Gerador de Contratos Grátis, 
-    Modelo de Contrato de Aluguel, Estudar para OAB com IA, Resumo de Jurisprudence, Cartório Digital, 
-    Transcrição de Audiência, Arthur Carmélio, Direito Notarial e Registral.
-    """)
+    st.caption("Tags: Assistente Jurídico, IA Jurídica, OAB, Cartório Digital, Arthur Carmélio.")
