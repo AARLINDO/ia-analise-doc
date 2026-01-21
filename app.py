@@ -16,66 +16,83 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# LÓGICA DO GEMINI 1.5 (ESTÁVEL E GRÁTIS)
+# LÓGICA ROBUSTA (TENTA TODOS OS MODELOS POSSÍVEIS)
 # ==============================================================================
 def get_gemini_response(prompt, context_text="", image_data=None, mime_type=None, mode="padrao"):
-    # 1. PEGA A CHAVE DO COFRE
+    # 1. PEGA A CHAVE
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
     except:
-        return "⚠️ ERRO CRÍTICO: Chave não configurada no Secrets."
+        return "⚠️ ERRO: Chave não configurada no Secrets."
 
-    # 2. DEFINE AS PERSONAS
+    # 2. LISTA DE MODELOS (Do melhor para o mais compatível)
+    # Vamos tentar os nomes que apareceram no seu Scanner + os clássicos
+    tentativas = [
+        "gemini-flash-latest",   # Apareceu no seu scanner!
+        "gemini-1.5-flash",      # Padrão
+        "gemini-pro",            # Clássico (Funciona sempre)
+        "gemini-1.5-pro-latest",
+        "gemini-pro-vision"      # Antigo para imagens
+    ]
+
     personas = {
-        "padrao": "Você é um assistente jurídico de elite, especialista em leis brasileiras.",
-        "oab": "ATUE COMO: Examinador da OAB (2ª Fase Trabalho). Seja rigoroso. Exija fundamentação (Art. 840 CLT, Súmulas).",
-        "pcsc": "ATUE COMO: Mentor PCSC (Escrivão). Foque em Inquérito Policial, Prisões e pegadinhas da banca FGV/Cebraspe."
+        "padrao": "Você é um assistente jurídico de elite.",
+        "oab": "ATUE COMO: Examinador OAB. Exija fundamentação (Art. 840 CLT).",
+        "pcsc": "ATUE COMO: Mentor PCSC. Foque em Inquérito e pegadinhas."
     }
-    
-    # 3. USA O MODELO 1.5 FLASH (Agora compatível com sua atualização!)
-    model_name = "gemini-1.5-flash"
     
     # Prepara o conteúdo
     content = [prompt]
-    if context_text: content.append(f"CONTEXTO ADICIONAL:\n{context_text}")
+    if context_text: content.append(f"CONTEXTO:\n{context_text}")
     
+    # Imagem só funciona em alguns modelos, vamos tratar isso
     if image_data:
         content.append({"mime_type": mime_type, "data": image_data})
 
-    try:
-        # Configura o modelo
-        model = genai.GenerativeModel(model_name, system_instruction=personas[mode])
-        response = model.generate_content(content)
-        return response.text
-
-    except Exception as e:
-        # Se der erro no Flash, tenta o Pro (Backup)
+    # 3. LOOP DE TENTATIVAS
+    erros = []
+    for modelo in tentativas:
         try:
-            model_backup = genai.GenerativeModel("gemini-1.5-pro", system_instruction=personas[mode])
-            return model_backup.generate_content(content).text
-        except:
-            return f"❌ Erro de Conexão: {str(e)}"
+            # Tenta configurar e gerar
+            system_inst = personas[mode] if "vision" not in modelo and "gemini-pro" != modelo else None
+            
+            # Adaptação para modelos antigos que não aceitam system_instruction direto
+            if system_inst is None: 
+                final_content = [f"PERSONA: {personas[mode]}", *content]
+            else:
+                final_content = content
+
+            model = genai.GenerativeModel(modelo, system_instruction=system_inst)
+            response = model.generate_content(final_content)
+            
+            # Se chegou aqui, FUNCIONOU!
+            return f"✅ (Respondido usando modelo: {modelo})\n\n{response.text}"
+            
+        except Exception as e:
+            erros.append(f"{modelo}: {str(e)}")
+            continue # Tenta o próximo da lista
+
+    return f"❌ FALHA TOTAL: Nenhum modelo funcionou.\nErros: {erros}"
 
 # ==============================================================================
 # INTERFACE
 # ==============================================================================
 st.title("⚖️ Carmélio AI Studio")
 
-# Verifica conexão visualmente
 if "GOOGLE_API_KEY" in st.secrets:
     with st.sidebar:
-        st.success(f"✅ Conectado: Gemini 1.5 Flash")
+        st.success("✅ Sistema Conectado")
+        st.info("Usando Seletor Automático de Modelos")
         st.divider()
-        mode = st.radio("Modo de Estudo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
+        mode = st.radio("Modo:", ["🤖 Geral", "⚖️ OAB", "🚓 PCSC"])
         mode_map = {"🤖 Geral": "padrao", "⚖️ OAB": "oab", "🚓 PCSC": "pcsc"}
         if st.button("🗑️ Limpar"):
             st.session_state['chat'] = []
             st.rerun()
 
-    tab1, tab2 = st.tabs(["💬 Chat Mentor", "📄 Analisar Arquivo"])
+    tab1, tab2 = st.tabs(["💬 Chat", "📄 Arquivos"])
 
-    # CHAT
     with tab1:
         if 'chat' not in st.session_state: st.session_state['chat'] = []
         for msg in st.session_state['chat']:
@@ -86,19 +103,18 @@ if "GOOGLE_API_KEY" in st.secrets:
             st.session_state['chat'].append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Analisando..."):
+                with st.spinner("Testando modelos disponíveis..."):
                     resp = get_gemini_response(prompt, mode=mode_map[mode])
                     st.markdown(resp)
                     st.session_state['chat'].append({"role": "assistant", "content": resp})
 
-    # ARQUIVOS
     with tab2:
-        uploaded = st.file_uploader("Upload (PDF/Img)", type=["pdf", "jpg", "png"])
+        uploaded = st.file_uploader("Upload", type=["pdf", "jpg", "png"])
         if uploaded and st.button("Analisar"):
-            with st.spinner("Lendo documento..."):
+            with st.spinner("Lendo..."):
                 bytes_data = uploaded.getvalue()
                 mime = uploaded.type
-                resp = get_gemini_response("Analise este documento detalhadamente.", image_data=bytes_data, mime_type=mime)
+                resp = get_gemini_response("Analise este documento.", image_data=bytes_data, mime_type=mime)
                 st.write(resp)
 else:
     st.error("🚫 Chave não encontrada no Secrets.")
