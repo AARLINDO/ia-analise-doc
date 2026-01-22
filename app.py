@@ -49,65 +49,83 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
     
     .timer-container {
-        background-color: #1F2430; /* Fundo do cartão do timer */
+        background-color: #1F2430;
         border-radius: 20px;
-        padding: 40px;
+        padding: 30px;
         text-align: center;
         border: 1px solid #2B2F3B;
         box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        margin-bottom: 20px;
-        max-width: 600px;
+        margin-bottom: 25px;
+        max-width: 700px;
         margin-left: auto;
         margin-right: auto;
     }
     
     .timer-display {
         font-family: 'Roboto Mono', monospace;
-        font-size: 120px;
+        font-size: 130px;
         font-weight: 700;
         color: #FFFFFF;
         line-height: 1;
-        margin: 20px 0;
-        text-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        margin: 10px 0;
+        text-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
     }
     
     .timer-label {
         font-family: 'Inter', sans-serif;
-        font-size: 14px;
+        font-size: 16px;
         text-transform: uppercase;
         letter-spacing: 3px;
-        color: #9CA3AF;
-        margin-bottom: 10px;
+        color: #60A5FA;
+        margin-bottom: 5px;
+        font-weight: 600;
     }
 
     /* BOTÕES CUSTOMIZADOS */
     .stButton>button {
-        border-radius: 8px;
+        border-radius: 10px;
         font-weight: 600;
         border: none;
         transition: 0.2s;
+        height: 50px;
     }
     
     /* Botão Principal (Iniciar) - Azul Vibrante */
     div[data-testid="stHorizontalBlock"] button[kind="primary"] {
-        background-color: #3B82F6;
+        background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
         color: white;
-        height: 55px;
-        font-size: 20px;
+        font-size: 18px;
         box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
     }
     div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
-        background-color: #2563EB;
         transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
     }
 
     /* PERFIL LATERAL */
     .profile-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
-    .profile-name { font-weight: 700; font-size: 18px; color: #FFFFFF; margin-top: 10px; }
-    .profile-role { font-size: 11px; color: #60A5FA; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 5px;}
+    .profile-name { font-weight: 700; font-size: 18px; color: #FFFFFF; margin-top: 5px; }
     
     /* CARDS GERAIS */
     .question-card { background-color: #1F2430; padding: 25px; border-radius: 12px; border-left: 4px solid #3B82F6; margin-bottom: 15px; }
+    
+    /* Ajuste do Radio Button horizontal para parecer abas */
+    div[row-widget="radio"] > div {
+        flex-direction: row;
+        justify-content: center;
+        gap: 20px;
+    }
+    div[row-widget="radio"] label {
+        background-color: #1F2430;
+        padding: 10px 20px;
+        border-radius: 10px;
+        border: 1px solid #2B2F3B;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    div[row-widget="radio"] label:hover {
+        border-color: #3B82F6;
+    }
     
 </style>
 """, unsafe_allow_html=True)
@@ -129,7 +147,9 @@ if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call =
 # Estado do Pomodoro
 if "pomo_state" not in st.session_state: st.session_state.pomo_state = "STOPPED"
 if "pomo_time_left" not in st.session_state: st.session_state.pomo_time_left = 25 * 60
-if "pomo_mode" not in st.session_state: st.session_state.pomo_mode = "Foco" 
+# Mapeamento de tempos
+POMO_TIMES = {"🧠 Foco (25m)": 25, "☕ Descanso Curto (5m)": 5, "🧘 Descanso Longo (15m)": 15}
+if "pomo_mode_sel" not in st.session_state: st.session_state.pomo_mode_sel = "🧠 Foco (25m)"
 if "pomo_initial_time" not in st.session_state: st.session_state.pomo_initial_time = 25 * 60
 
 RATE_LIMIT_SECONDS = 15
@@ -254,18 +274,17 @@ def extract_json_from_text(text):
     except Exception: return None
 
 # =============================================================================
-# 5. SIDEBAR
+# 5. SIDEBAR (PERFIL LIMPO FINAL)
 # =============================================================================
 with st.sidebar:
     try: st.image("logo.jpg.png", use_container_width=True)
     except: st.warning("Logo não encontrada.")
     
-    # --- PERFIL FINAL ---
+    # --- PERFIL SEM CARGO ---
     st.markdown("""
     <div class="profile-box">
         <small style="color: #9CA3AF;">Desenvolvido por</small><br>
         <div class="profile-name">Arthur Carmélio</div>
-        <div class="profile-role">ESPECIALISTA NOTARIAL</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -354,42 +373,39 @@ if menu_opcao == "🎓 Área do Estudante":
                     st.markdown(r)
                     add_xp(20)
 
-    # 1.3 SALA DE FOCO (VISUAL LIMPO E CENTRALIZADO)
+    # 1.3 SALA DE FOCO (REVISADA E FUNCIONAL)
     with tab_pomodoro:
         st.markdown("### 🍅 Sala de Foco")
         
-        # --- SELETORES DE MODO (NO TOPO) ---
-        c_mode1, c_mode2, c_mode3 = st.columns(3)
-        if c_mode1.button("🧠 Foco (25m)", use_container_width=True):
-            st.session_state.pomo_mode = "Foco"
-            st.session_state.pomo_time_left = 25 * 60
-            st.session_state.pomo_initial_time = 25 * 60
-            st.session_state.pomo_state = "STOPPED"
-            st.rerun()
-        if c_mode2.button("☕ Curto (5m)", use_container_width=True):
-            st.session_state.pomo_mode = "Descanso Curto"
-            st.session_state.pomo_time_left = 5 * 60
-            st.session_state.pomo_initial_time = 5 * 60
-            st.session_state.pomo_state = "STOPPED"
-            st.rerun()
-        if c_mode3.button("🧘 Longo (15m)", use_container_width=True):
-            st.session_state.pomo_mode = "Descanso Longo"
-            st.session_state.pomo_time_left = 15 * 60
-            st.session_state.pomo_initial_time = 15 * 60
-            st.session_state.pomo_state = "STOPPED"
-            st.rerun()
+        # Seletor de Modo (Horizontal, estilo abas)
+        modo_selecionado = st.radio(
+            "Modo:", 
+            list(POMO_TIMES.keys()), 
+            horizontal=True, 
+            label_visibility="collapsed",
+            key="pomo_mode_sel_radio"
+        )
+
+        # Lógica de Atualização do Modo (Só se estiver parado ou se mudar o seletor)
+        if st.session_state.pomo_state == "STOPPED" and modo_selecionado != st.session_state.get("last_pomo_mode"):
+             tempo_min = POMO_TIMES[modo_selecionado]
+             st.session_state.pomo_initial_time = tempo_min * 60
+             st.session_state.pomo_time_left = tempo_min * 60
+             st.session_state.last_pomo_mode = modo_selecionado
+             st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- CONTAINER PRINCIPAL DO TIMER ---
-        # Calculo do tempo
+        # CONTAINER PRINCIPAL DO TIMER
         mins, secs = divmod(st.session_state.pomo_time_left, 60)
         time_str = f"{mins:02d}:{secs:02d}"
         
-        # HTML do Timer
+        # Label limpa (remove os emojis e tempo do nome do modo)
+        label_limpa = re.sub(r'[^\w\s]', '', modo_selecionado.split('(')[0]).strip()
+
         st.markdown(f"""
         <div class="timer-container">
-            <div class="timer-label">{st.session_state.pomo_mode}</div>
+            <div class="timer-label">{label_limpa}</div>
             <div class="timer-display">{time_str}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -403,33 +419,38 @@ if menu_opcao == "🎓 Área do Estudante":
         # --- BOTÕES DE AÇÃO ---
         c_play, c_pause, c_reset = st.columns(3)
         
-        if c_play.button("COMEÇAR", type="primary", use_container_width=True):
+        # Botão Iniciar/Retomar
+        if c_play.button("COMEÇAR" if st.session_state.pomo_state == "STOPPED" else "RETOMAR", type="primary", use_container_width=True):
             st.session_state.pomo_state = "RUNNING"
             st.rerun()
             
-        if c_pause.button("PAUSAR", use_container_width=True):
+        # Botão Pausar
+        if c_pause.button("PAUSAR", use_container_width=True, disabled=st.session_state.pomo_state != "RUNNING"):
             st.session_state.pomo_state = "PAUSED"
             st.rerun()
             
+        # Botão Zerar (Reinicia com o modo selecionado atualmente no radio)
         if c_reset.button("ZERAR", use_container_width=True):
             st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_time_left = st.session_state.pomo_initial_time
+            tempo_min = POMO_TIMES[st.session_state.pomo_mode_sel_radio]
+            st.session_state.pomo_initial_time = tempo_min * 60
+            st.session_state.pomo_time_left = tempo_min * 60
             st.rerun()
 
-        # Lógica do Loop
+        # Lógica do Loop (Non-blocking)
         if st.session_state.pomo_state == "RUNNING":
             if st.session_state.pomo_time_left > 0:
-                time.sleep(1)
+                time.sleep(1) # Espera 1s
                 st.session_state.pomo_time_left -= 1
-                st.rerun()
+                st.rerun() # Atualiza a tela
             else:
                 st.session_state.pomo_state = "STOPPED"
                 st.balloons()
-                add_xp(50)
+                xp_ganho = 50 if "Foco" in st.session_state.pomo_mode_sel_radio else 10
+                add_xp(xp_ganho)
                 st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        # Rádio Lofi (Discreta)
         with st.expander("🎵 Música de Fundo (Lofi Radio)", expanded=False):
             st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
 
@@ -580,5 +601,5 @@ elif menu_opcao == "📊 Logs":
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v10.1 Stable")
+    st.write("Carmélio AI - v10.2 Stable")
     st.write("Desenvolvido por Arthur Carmélio.")
