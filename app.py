@@ -10,28 +10,7 @@ import re
 import os
 
 # =============================================================================
-# 0. DEPENDÊNCIAS
-# =============================================================================
-try:
-    import pdfplumber
-    PDFPLUMBER_AVAILABLE = True
-except ImportError:
-    PDFPLUMBER_AVAILABLE = False
-
-try:
-    import docx as docx_reader
-    DOCX_READER_AVAILABLE = True
-except ImportError:
-    DOCX_READER_AVAILABLE = False
-
-try:
-    from PIL import Image, ImageFilter, ImageOps
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
-
-# =============================================================================
-# 1. CONFIGURAÇÃO E DESIGN (PREMIUM CLEAN)
+# 1. DEPENDÊNCIAS E CONFIGURAÇÃO
 # =============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Suíte Jurídica",
@@ -39,101 +18,93 @@ st.set_page_config(
     layout="wide"
 )
 
+# Tentativa de importação segura
+try: import pdfplumber
+except ImportError: pdfplumber = None
+try: import docx as docx_reader
+except ImportError: docx_reader = None
+try: from PIL import Image, ImageFilter, ImageOps
+except ImportError: Image = None
+
+# =============================================================================
+# 2. ESTILOS CSS (DESIGN PREMIUM)
+# =============================================================================
 st.markdown("""
 <style>
     /* GERAL */
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* TIMER GIGANTE */
+    /* POMODORO TIMER */
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
-    
     .timer-container {
-        background-color: #1F2430;
-        border-radius: 20px;
-        padding: 40px;
-        text-align: center;
-        border: 1px solid #2B2F3B;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        margin-bottom: 30px;
-        max-width: 600px;
-        margin-left: auto;
-        margin-right: auto;
+        background-color: #1F2430; border-radius: 20px; padding: 40px;
+        text-align: center; border: 1px solid #2B2F3B; margin: 0 auto 30px auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 600px;
     }
-    
     .timer-display {
-        font-family: 'Roboto Mono', monospace;
-        font-size: 140px; /* Aumentado */
-        font-weight: 700;
-        color: #FFFFFF;
-        line-height: 1;
-        margin: 10px 0;
+        font-family: 'Roboto Mono', monospace; font-size: 130px; font-weight: 700;
+        color: #FFFFFF; line-height: 1; margin: 10px 0;
         text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
     }
-    
     .timer-label {
-        font-family: 'Inter', sans-serif;
-        font-size: 18px;
-        text-transform: uppercase;
-        letter-spacing: 4px;
-        color: #60A5FA;
-        margin-bottom: 10px;
-        font-weight: 600;
+        font-family: 'Inter', sans-serif; font-size: 18px; text-transform: uppercase;
+        letter-spacing: 4px; color: #60A5FA; margin-bottom: 10px; font-weight: 600;
     }
 
-    /* BOTÕES GERAIS */
+    /* BOTÕES */
     .stButton>button {
-        border-radius: 10px;
-        font-weight: 600;
-        border: none;
-        transition: 0.2s;
-        height: 50px;
+        border-radius: 10px; font-weight: 600; height: 50px; border: none; transition: 0.2s;
     }
-    
-    /* Botão Principal (COMEÇAR) */
     div[data-testid="stHorizontalBlock"] button[kind="primary"] {
         background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
-        color: white;
-        font-size: 20px; /* Maior */
-        height: 60px;
-        box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+        color: white; font-size: 18px; box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
     }
     div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
         transform: scale(1.02);
-        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
     }
 
-    /* PERFIL LATERAL (LIMPO) */
+    /* PERFIL */
     .profile-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
-    .profile-name { font-weight: 700; font-size: 18px; color: #FFFFFF; margin-top: 5px; }
+    .profile-dev { font-size: 12px; color: #9CA3AF; margin-bottom: 2px; }
+    .profile-name { font-weight: 700; font-size: 20px; color: #FFFFFF; }
     
     /* CARDS */
     .question-card { background-color: #1F2430; padding: 25px; border-radius: 12px; border-left: 4px solid #3B82F6; margin-bottom: 15px; }
-    
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 2. ESTADO GLOBAL
+# 3. GESTÃO DE ESTADO E UTILITÁRIOS
 # =============================================================================
-if "user_xp" not in st.session_state: st.session_state.user_xp = 0
-if "user_level" not in st.session_state: st.session_state.user_level = 1
-if "edital_text" not in st.session_state: st.session_state.edital_text = ""
-if "edital_topics" not in st.session_state: st.session_state.edital_topics = []
-if "generated_questions" not in st.session_state: st.session_state.generated_questions = []
-if "focus_sessions" not in st.session_state: st.session_state.focus_sessions = []
-if "cards" not in st.session_state: st.session_state.cards = []
-if "logs" not in st.session_state: st.session_state.logs = []
-if "lgpd_ack" not in st.session_state: st.session_state.lgpd_ack = False
-if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call = 0.0
+# Inicialização segura de variáveis
+DEFAULTS = {
+    "user_xp": 0, "user_level": 1,
+    "edital_text": "", "edital_topics": [],
+    "generated_questions": [], "logs": [], "cards": [],
+    "lgpd_ack": False, "last_heavy_call": 0.0,
+    # Pomodoro
+    "pomo_state": "STOPPED", "pomo_mode": "Foco", 
+    "pomo_duration": 25 * 60, "pomo_end_time": None,
+    "pomo_auto_start": False
+}
 
-# Estado do Pomodoro
-if "pomo_state" not in st.session_state: st.session_state.pomo_state = "STOPPED"
-if "pomo_time_left" not in st.session_state: st.session_state.pomo_time_left = 25 * 60
-if "pomo_mode" not in st.session_state: st.session_state.pomo_mode = "FOCO" 
-if "pomo_initial_time" not in st.session_state: st.session_state.pomo_initial_time = 25 * 60
+for key, value in DEFAULTS.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-RATE_LIMIT_SECONDS = 15
+RATE_LIMIT_SECONDS = 5 # Tempo entre chamadas pesadas
+
+def check_rate_limit():
+    """Impede spam de cliques na API"""
+    now = time.time()
+    if now - st.session_state.last_heavy_call < RATE_LIMIT_SECONDS:
+        st.warning(f"⏳ Aguarde alguns segundos...")
+        return True
+    return False
+
+def mark_call():
+    st.session_state.last_heavy_call = time.time()
 
 def add_xp(amount):
     st.session_state.user_xp += amount
@@ -144,444 +115,341 @@ def add_xp(amount):
     else:
         st.toast(f"+{amount} XP", icon="⭐")
 
-def rate_limited():
-    now = time.time()
-    if now - st.session_state.last_heavy_call < RATE_LIMIT_SECONDS:
-        return True, RATE_LIMIT_SECONDS - (now - st.session_state.last_heavy_call)
-    return False, 0
+def extract_json_safe(text):
+    """Extrai JSON de forma robusta procurando tags <json> ou chaves {}"""
+    match = re.search(r"<json>(.*?)</json>", text, re.DOTALL)
+    json_str = match.group(1) if match else None
+    
+    if not json_str:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        json_str = match.group(0) if match else None
+        
+    if json_str:
+        try: return json.loads(json_str)
+        except: return None
+    return None
 
-def mark_heavy_call():
-    st.session_state.last_heavy_call = time.time()
+def create_docx(text, title="Documento Carmélio AI"):
+    try:
+        doc = Document()
+        doc.add_heading(title, 0)
+        for p in str(text).split('\n'):
+            if p.strip(): doc.add_paragraph(p)
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    except: return None
 
-def add_log(task_type, model, latency_ms, token_usage, status):
-    st.session_state.logs.append({
-        "task_type": task_type, "model": model, "latency_ms": latency_ms,
-        "token_usage": token_usage, "status": status, "timestamp": datetime.now().isoformat()
-    })
+# =============================================================================
+# 4. MOTOR DE IA (GROQ)
+# =============================================================================
+def get_client():
+    api_key = st.secrets.get("GROQ_API_KEY")
+    if not api_key: return None
+    return Groq(api_key=api_key)
 
+def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente útil.", temp=0.3):
+    if check_rate_limit(): return None
+    client = get_client()
+    if not client: return "⚠️ Configure a GROQ_API_KEY."
+    
+    mark_call()
+    try:
+        if type == "text":
+            r = client.chat.completions.create(
+                messages=[{"role":"system","content":system},{"role":"user","content":prompt}],
+                model="llama-3.3-70b-versatile", temperature=temp
+            )
+            return r.choices[0].message.content
+            
+        elif type == "vision" and file_bytes:
+            b64 = base64.b64encode(file_bytes).decode('utf-8')
+            r = client.chat.completions.create(
+                messages=[{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}],
+                model="llama-3.2-11b-vision-preview", temperature=0.1
+            )
+            return r.choices[0].message.content
+            
+        elif type == "audio" and file_bytes:
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                tmp.write(file_bytes); tmp_path = tmp.name
+            with open(tmp_path, "rb") as f:
+                transcription = client.audio.transcriptions.create(
+                    file=(os.path.basename(tmp_path), f.read()),
+                    model="whisper-large-v3", response_format="text", language="pt"
+                )
+            os.unlink(tmp_path)
+            return transcription
+            
+    except Exception as e:
+        return f"Erro na IA: {e}"
+
+# =============================================================================
+# 5. SIDEBAR
+# =============================================================================
+with st.sidebar:
+    try: st.image("logo.jpg.png", use_container_width=True)
+    except: pass
+    
+    st.markdown("""
+    <div class="profile-box">
+        <div class="profile-dev">Desenvolvido por</div>
+        <div class="profile-name">Arthur Carmélio</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    c1.metric("Nível", st.session_state.user_level)
+    c2.metric("XP", st.session_state.user_xp)
+    st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
+    
+    st.markdown("---")
+    menu = st.radio("Navegação:", 
+        ["🎯 Mestre dos Editais", "🍅 Sala de Foco", "⚡ Flashcards", "📅 Cronograma", "💬 Mentor Jurídico", "📄 Redação", "🏢 Cartório OCR", "🎙️ Transcrição", "⭐ Feedback"],
+        label_visibility="collapsed"
+    )
+    st.markdown("---")
+    st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
+
+# LGPD Bloqueio
 if not st.session_state.lgpd_ack:
     with st.expander("🔐 Acesso ao Sistema", expanded=True):
-        st.write("Ao entrar, você concorda com o processamento de dados via IA para fins de estudo.")
+        st.write("Ao entrar, você concorda com o uso de IA para processamento de dados.")
         if st.button("Entrar no Sistema"):
             st.session_state.lgpd_ack = True
             st.rerun()
     st.stop()
 
 # =============================================================================
-# 3. BACKEND (GROQ)
+# 6. MÓDULOS DO SISTEMA
 # =============================================================================
-def get_groq_client():
-    api_key = st.secrets.get("GROQ_API_KEY")
-    if not api_key: return None, "⚠️ Configure a GROQ_API_KEY nos Secrets."
-    return Groq(api_key=api_key), None
 
-def criar_docx(texto, titulo="Documento Carmélio AI"):
-    try:
-        doc = Document()
-        doc.add_heading(titulo, 0)
-        for p in str(texto).split('\n'):
-            if p.strip(): doc.add_paragraph(p)
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
-    except Exception: return None
+# --- MESTRE DOS EDITAIS (Consolidado) ---
+if menu == "🎯 Mestre dos Editais":
+    st.title("🎯 Mestre dos Editais & Questões")
+    st.caption("Central de Inteligência: Verticalize editais e gere provas personalizadas.")
 
-def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="Você é um assistente útil.", model_override=None, temperature=0.3):
-    client, erro = get_groq_client()
-    if erro: return f"Erro de Configuração: {erro}"
-    start = time.time()
-    try:
-        if task_type == "vision":
-            model = "llama-3.2-11b-vision-preview"
-        elif task_type == "audio":
-            model = "whisper-large-v3"
-        else:
-            model = model_override if model_override else "llama-3.3-70b-versatile"
+    with st.container():
+        c_up, c_inf = st.columns([1, 2])
+        with c_up:
+            file = st.file_uploader("📂 Upload Edital (PDF/DOCX)", type=["pdf", "docx"])
+        with c_inf:
+            if not st.session_state.edital_text:
+                st.info("👈 **Comece aqui:** Suba seu edital. A IA organizará os tópicos e habilitará o modo de treino focado.")
+            else:
+                st.success("✅ Edital ativo!")
+                if st.button("🗑️ Limpar"):
+                    st.session_state.edital_text = ""
+                    st.rerun()
 
-        if task_type == "vision" and file_bytes:
-            b64 = base64.b64encode(file_bytes).decode('utf-8')
-            content = client.chat.completions.create(
-                messages=[{"role": "user", "content": [{"type": "text", "text": prompt},{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}],
-                model=model, temperature=0.1
-            ).choices[0].message.content
-            add_log("vision", model, int((time.time()-start)*1000), len(prompt), "ok")
-            return content
+    # Processamento Automático do Edital
+    if file and not st.session_state.edital_text:
+        with st.spinner("🧠 Lendo edital..."):
+            raw = "Conteúdo extraído..."
+            if file.type == "application/pdf" and pdfplumber:
+                with pdfplumber.open(BytesIO(file.getvalue())) as pdf: raw = "".join([p.extract_text() or "" for p in pdf.pages])
+            elif "word" in file.type and docx_reader:
+                doc = docx_reader.Document(BytesIO(file.getvalue()))
+                raw = "\n".join([p.text for p in doc.paragraphs])
+            
+            st.session_state.edital_text = raw
+            st.rerun()
 
-        elif task_type == "audio" and file_bytes:
-            import tempfile
-            suffix = ".mp3"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes); tmp_path = tmp.name
-            with open(tmp_path, "rb") as file:
-                transcription = client.audio.transcriptions.create(
-                    file=(os.path.basename(tmp_path), file.read()),
-                    model=model, response_format="text", language="pt"
-                )
-            os.unlink(tmp_path)
-            add_log("audio", model, int((time.time()-start)*1000), len(file_bytes), "ok")
-            return transcription
-
-        else:
-            content = client.chat.completions.create(
-                messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
-                model=model, temperature=temperature
-            ).choices[0].message.content
-            add_log("text", model, int((time.time()-start)*1000), len(prompt), "ok")
-            return content
-
-    except Exception as e:
-        add_log(task_type, model_override or "auto", int((time.time()-start)*1000), 0, f"error: {e}")
-        return f"❌ Erro na IA: {str(e)}"
-
-def validate_json_response(response_text):
-    try:
-        match = re.search(r"\{.*\}", response_text, re.DOTALL)
-        if match: return json.loads(match.group(0))
-    except: pass
-    return None
-
-def validate_question_json(data):
-    try:
-        assert set(data.keys()) == {"enunciado", "alternativas", "gabarito", "comentario"}
-        assert all(k in data["alternativas"] for k in ["A", "B", "C", "D", "E"])
-        return True, ""
-    except AssertionError: return False, "Formato inválido."
-
-def extract_json_from_text(text):
-    m = re.search(r"\{.*\}", text, flags=re.S)
-    if not m: return None
-    try: return json.loads(m.group(0))
-    except Exception: return None
-
-# =============================================================================
-# 5. SIDEBAR (PERFIL LIMPO FINAL)
-# =============================================================================
-with st.sidebar:
-    try: st.image("logo.jpg.png", use_container_width=True)
-    except: st.warning("Logo não encontrada.")
+    st.markdown("---")
     
-    # --- PERFIL: SÓ NOME ---
-    st.markdown("""
-    <div class="profile-box">
-        <small style="color: #9CA3AF;">Desenvolvido por</small><br>
-        <div class="profile-name">Arthur Carmélio</div>
+    # Gerador de Questões
+    st.subheader("📝 Gerador de Questões")
+    modo = st.radio("Modo:", ["🎲 Aleatório", "🎯 Focado no Edital"], horizontal=True, disabled=not st.session_state.edital_text)
+    
+    c1, c2, c3, c4 = st.columns(4)
+    if modo == "🎯 Focado no Edital" and st.session_state.edital_text:
+        disc = "Geral do Edital"
+        assunto = "Tópicos do edital carregado"
+        st.info(f"Gerando questões com base no arquivo carregado.")
+    else:
+        disc = c1.selectbox("Disciplina", ["Constitucional", "Administrativo", "Penal", "Civil", "Proc. Penal", "Notarial"])
+        assunto = c2.text_input("Assunto", "Atos Administrativos")
+    
+    banca = c3.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
+    nivel = c4.selectbox("Nível", ["Médio", "Difícil", "Juiz"])
+
+    if st.button("🚀 Gerar Questão", type="primary", use_container_width=True):
+        with st.spinner("Elaborando..."):
+            ctx = st.session_state.edital_text[:4000] if modo == "🎯 Focado no Edital" else ""
+            prompt = (
+                f"Crie uma questão inédita. Banca: {banca}. Nível: {nivel}. Disciplina: {disc}. Assunto: {assunto}. "
+                f"Contexto (se houver): {ctx}. "
+                "Retorne JSON dentro de <json>...</json> com chaves: enunciado, alternativas (dict A-E), gabarito, comentario."
+            )
+            res = call_ai(prompt, temp=0.4)
+            data = extract_json_safe(res)
+            
+            if data:
+                st.session_state.q_atual = data
+                st.session_state.ver_resp = False
+                add_xp(10)
+            else:
+                st.error("Erro na geração. Tente novamente.")
+
+    if 'q_atual' in st.session_state:
+        q = st.session_state.q_atual
+        st.markdown(f"<div class='question-card'><h5>{banca} | {nivel}</h5><p style='font-size:18px; color:white;'>{q.get('enunciado')}</p></div>", unsafe_allow_html=True)
+        for k, v in q.get('alternativas', {}).items():
+            st.write(f"**{k})** {v}")
+        
+        if st.button("👁️ Ver Resposta"): st.session_state.ver_resp = True
+        if st.session_state.get('ver_resp'):
+            st.success(f"Gabarito: {q.get('gabarito')}")
+            st.info(f"📝 {q.get('comentario')}")
+
+# --- SALA DE FOCO (POMODORO INTELIGENTE) ---
+elif menu == "🍅 Sala de Foco":
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 1. Seletor de Modo
+    c_m1, c_m2, c_m3 = st.columns(3)
+    def set_pomo(mode, min):
+        st.session_state.pomo_mode = mode
+        st.session_state.pomo_duration = min * 60
+        st.session_state.pomo_state = "STOPPED"
+        st.session_state.pomo_end_time = None
+        st.rerun()
+
+    if c_m1.button("🧠 FOCO (25m)", use_container_width=True): set_pomo("Foco", 25)
+    if c_m2.button("☕ CURTO (5m)", use_container_width=True): set_pomo("Descanso", 5)
+    if c_m3.button("🧘 LONGO (15m)", use_container_width=True): set_pomo("Longo", 15)
+
+    # 2. Lógica do Timer (Timestamp - Não trava)
+    remaining = st.session_state.pomo_duration
+    if st.session_state.pomo_state == "RUNNING":
+        now = time.time()
+        if now >= st.session_state.pomo_end_time:
+            # Acabou
+            st.session_state.pomo_state = "STOPPED"
+            st.balloons()
+            st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+            add_xp(50)
+            
+            # Auto-Start Lógica
+            if st.session_state.pomo_auto_start:
+                next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
+                next_min = 5 if next_mode == "Descanso" else 25
+                st.session_state.pomo_mode = next_mode
+                st.session_state.pomo_duration = next_min * 60
+                st.session_state.pomo_end_time = time.time() + (next_min * 60)
+                st.session_state.pomo_state = "RUNNING"
+                st.toast(f"Iniciando {next_mode}...", icon="🔄")
+                time.sleep(2)
+                st.rerun()
+            else:
+                remaining = 0
+        else:
+            remaining = int(st.session_state.pomo_end_time - now)
+            time.sleep(1)
+            st.rerun()
+
+    # 3. Visualização
+    mins, secs = divmod(remaining, 60)
+    time_str = f"{mins:02d}:{secs:02d}"
+    
+    st.markdown(f"""
+    <div class="timer-container">
+        <div class="timer-label">{st.session_state.pomo_mode}</div>
+        <div class="timer-display">{time_str}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    c_lvl, c_xp = st.columns(2)
-    c_lvl.metric("Nível", st.session_state.user_level)
-    c_xp.metric("XP", st.session_state.user_xp)
-    st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
-
-    st.markdown("---")
-    menu_opcao = st.radio("Navegação:",
-        ["🎓 Área do Estudante", "💬 Mentor Jurídico", "📄 Redação de Contratos", "🏢 Cartório Digital (OCR)", "🎙️ Transcrição", "⭐ Feedback", "📊 Logs", "👤 Sobre"],
-        label_visibility="collapsed"
-    )
-
-    st.markdown("---")
-    col_link, col_zap = st.columns(2)
-    with col_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
-    with col_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720?text=Suporte%20Carmelio%20AI)")
-
-# =============================================================================
-# 6. CONSTANTES
-# =============================================================================
-DISCIPLINAS = [
-    "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Civil",
-    "Processo Penal", "Processo Civil", "Direito Tributário", "Direito do Trabalho",
-    "Notarial e Registral", "Ética Profissional", "Português", "RLM", "Informática"
-]
-BANCAS = ["FGV", "Cebraspe", "Vunesp", "FCC", "AOCP", "Comperve", "IBFC", "Quadrix"]
-UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Federal"]
-
-# =============================================================================
-# 7. MÓDULOS
-# =============================================================================
-
-# --- MÓDULO 1: ESTUDANTE ---
-if menu_opcao == "🎓 Área do Estudante":
-    st.title("🎓 Área do Estudante Pro")
-    tab_questoes, tab_edital, tab_pomodoro, tab_flash, tab_crono = st.tabs(["📝 Banco Infinito", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "⚡ Flashcards", "📅 Cronograma"])
-
-    # 1.1 QUESTÕES
-    with tab_questoes:
-        st.markdown("### 🔎 Gerador de Questões Inéditas")
-        c1, c2, c3, c4 = st.columns(4)
-        disc = c1.selectbox("Disciplina", DISCIPLINAS)
-        banca = c2.selectbox("Banca", BANCAS)
-        uf = c3.selectbox("UF/Tribunal", UFS)
-        nivel = c4.selectbox("Nível", ["Fácil", "Médio", "Difícil"])
-        assunto = st.text_input("Assunto", placeholder="Ex: Atos Administrativos")
-        cargo = st.text_input("Cargo", placeholder="Ex: Escrevente")
-
-        if st.button("Gerar Questão"):
-            with st.spinner("Elaborando questão..."):
-                prompt = (
-                    "Gere 1 questão inédita em JSON com campos: enunciado, alternativas (A,B,C,D,E), gabarito (A–E), comentario. "
-                    f"Disciplina: {disc}. Assunto: {assunto}. Banca: {banca}. Cargo: {cargo}. Jurisdição: {uf}. "
-                    f"Nível: {nivel}. Cite artigos/súmulas. Retorne APENAS JSON."
-                )
-                res = processar_ia(prompt, task_type="text", temperature=0.3)
-                data = validate_json_response(res)
-                if data and validate_question_json(data)[0]:
-                    st.session_state.q_atual = data
-                    st.session_state.ver_resp = False
-                    add_xp(10)
-                else: st.error("Erro na geração. Tente novamente.")
-
-        if 'q_atual' in st.session_state:
-            q = st.session_state.q_atual
-            st.markdown(f"<div class='question-card'><h4>{disc} | {banca} | {uf}</h4><p>{q['enunciado']}</p></div>", unsafe_allow_html=True)
-            for k in ["A","B","C","D","E"]: st.write(f"**{k})** {q['alternativas'].get(k, '')}")
-            if st.button("👁️ Ver Gabarito"): st.session_state.ver_resp = True
-            if st.session_state.get('ver_resp'):
-                st.success(f"Gabarito: {q['gabarito']}")
-                st.info(f"Comentário: {q['comentario']}")
-                st.session_state.generated_questions.append(q)
-                if criar_docx(json.dumps(q, indent=2), "Questão"):
-                    st.download_button("💾 Baixar DOCX", criar_docx(json.dumps(q, indent=2), "Questão"), "Questao.docx")
-
-    # 1.2 MESTRE DOS EDITAIS
-    with tab_edital:
-        st.markdown("### 🎯 Verticalizador de Editais")
-        st.caption("Coloque seu edital aqui que a IA elaborará questões inéditas e verticalizará o conteúdo.")
-        
-        file = st.file_uploader("Upload Edital (PDF/DOCX)", type=["pdf", "docx"])
-        if st.button("Verticalizar"):
-            if file:
-                with st.spinner("IA Analisando..."):
-                    r = processar_ia(f"Verticalize este edital: {file.name}", temperature=0.1)
-                    st.markdown(r)
-                    add_xp(20)
-
-    # 1.3 SALA DE FOCO (POMODORO CORRIGIDO - BOTÕES)
-    with tab_pomodoro:
-        st.markdown("### 🍅 Sala de Foco")
-        
-        # --- SELETORES DE MODO (BOTÕES, NÃO RADIO) ---
-        c_mode1, c_mode2, c_mode3 = st.columns(3)
-        
-        if c_mode1.button("🧠 FOCO (25min)", use_container_width=True):
-            st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_initial_time = 25 * 60
-            st.session_state.pomo_time_left = 25 * 60
-            st.session_state.pomo_mode = "FOCO"
-            st.rerun()
-            
-        if c_mode2.button("☕ CURTO (5min)", use_container_width=True):
-            st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_initial_time = 5 * 60
-            st.session_state.pomo_time_left = 5 * 60
-            st.session_state.pomo_mode = "DESCANSO"
-            st.rerun()
-            
-        if c_mode3.button("🧘 LONGO (15min)", use_container_width=True):
-            st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_initial_time = 15 * 60
-            st.session_state.pomo_time_left = 15 * 60
-            st.session_state.pomo_mode = "DESCANSO LONGO"
-            st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # CONTAINER PRINCIPAL DO TIMER
-        mins, secs = divmod(st.session_state.pomo_time_left, 60)
-        time_str = f"{mins:02d}:{secs:02d}"
-        
-        st.markdown(f"""
-        <div class="timer-container">
-            <div class="timer-label">{st.session_state.pomo_mode}</div>
-            <div class="timer-display">{time_str}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Barra de Progresso
-        progresso = 1.0
-        if st.session_state.pomo_initial_time > 0:
-            progresso = st.session_state.pomo_time_left / st.session_state.pomo_initial_time
-        st.progress(progresso)
-
-        # --- BOTÕES DE AÇÃO ---
-        c_play, c_pause, c_reset = st.columns(3)
-        
-        if c_play.button("COMEÇAR", type="primary", use_container_width=True):
+    # 4. Controles
+    c_play, c_pause, c_reset = st.columns(3)
+    
+    if c_play.button("COMEÇAR", type="primary", use_container_width=True):
+        if st.session_state.pomo_state != "RUNNING":
             st.session_state.pomo_state = "RUNNING"
+            st.session_state.pomo_end_time = time.time() + remaining
             st.rerun()
             
-        if c_pause.button("PAUSAR", use_container_width=True):
-            st.session_state.pomo_state = "PAUSED"
-            st.rerun()
-            
-        if c_reset.button("ZERAR", use_container_width=True):
-            st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_time_left = st.session_state.pomo_initial_time
-            st.rerun()
-
-        # Lógica do Loop (Non-blocking)
+    if c_pause.button("PAUSAR", use_container_width=True):
         if st.session_state.pomo_state == "RUNNING":
-            if st.session_state.pomo_time_left > 0:
-                time.sleep(1) # Espera 1s
-                st.session_state.pomo_time_left -= 1
-                st.rerun() # Atualiza a tela
-            else:
-                st.session_state.pomo_state = "STOPPED"
-                st.balloons()
-                xp_ganho = 50 if "FOCO" in st.session_state.pomo_mode else 10
-                add_xp(xp_ganho)
-                st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
-
-        st.markdown("---")
-        with st.expander("🎵 Música de Fundo (Lofi Radio)", expanded=False):
-            st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
-
-    # 1.4 FLASHCARDS
-    with tab_flash:
-        st.markdown("### ⚡ Flashcards")
-        tema = st.text_input("Tema para memorizar")
-        if st.button("Criar Flashcard"):
-            r = processar_ia(f"Crie flashcard sobre {tema}. Retorne: PERGUNTA --- RESPOSTA")
-            if "---" in r:
-                f, b = r.split("---")
-                st.session_state.cards.append({"front": f.strip(), "back": b.strip()})
-                st.success("Criado!")
-                add_xp(5)
-            else: st.error("Erro formato.")
+            st.session_state.pomo_state = "PAUSED"
+            st.session_state.pomo_duration = remaining # Salva onde parou
+            st.rerun()
             
-        if st.session_state.cards:
-            st.write(f"Total: {len(st.session_state.cards)}")
-            for i, c in enumerate(st.session_state.cards):
-                st.info(f"Card {i+1}: {c['front']}")
-            csv = "front,back\n" + "\n".join([f"{c['front']},{c['back']}" for c in st.session_state.cards])
-            st.download_button("💾 Baixar Anki CSV", csv, "anki.csv")
+    if c_reset.button("ZERAR", use_container_width=True):
+        st.session_state.pomo_state = "STOPPED"
+        defaults = {"Foco": 25, "Descanso": 5, "Longo": 15}
+        st.session_state.pomo_duration = defaults.get(st.session_state.pomo_mode, 25) * 60
+        st.rerun()
 
-    # 1.5 CRONOGRAMA
-    with tab_crono:
-        st.markdown("### 📅 Cronograma")
-        h = st.slider("Horas/dia", 1, 8, 4)
-        topicos = st.text_area("Listar tópicos (um por linha)")
-        if st.button("Gerar Plano"):
-            topics = [t for t in topicos.split('\n') if t.strip()]
-            plan = []
-            base = datetime.today()
-            for i, t in enumerate(topics):
-                d = base + timedelta(days=i)
-                plan.append(f"{d.strftime('%d/%m')} - {t} ({h}h)")
-            res = "\n".join(plan)
-            st.text_area("Resultado", res, height=300)
-            if criar_docx(res): st.download_button("💾 Baixar Plano", criar_docx(res), "Plano.docx")
-            add_xp(15)
+    st.session_state.pomo_auto_start = st.checkbox("🔄 Iniciar ciclos automaticamente?", value=st.session_state.pomo_auto_start)
+
+    with st.expander("🎵 Rádio Lofi", expanded=False):
+        st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+
+# --- FLASHCARDS ---
+elif menu == "⚡ Flashcards":
+    st.title("⚡ Flashcards AI")
+    tema = st.text_input("Assunto")
+    if st.button("Criar"):
+        res = call_ai(f"Crie flashcard sobre {tema}. Retorne JSON <json>{{'front':'...', 'back':'...'}}</json>")
+        data = extract_json_safe(res)
+        if data:
+            st.session_state.cards.append(data)
+            st.success("Criado!")
+            add_xp(5)
+    
+    if st.session_state.cards:
+        for i, c in enumerate(st.session_state.cards):
+            with st.expander(f"Card {i+1}: {c.get('front')}"):
+                st.write(c.get('back'))
+
+# --- CRONOGRAMA ---
+elif menu == "📅 Cronograma":
+    st.title("📅 Cronograma Inteligente")
+    h = st.slider("Horas diárias", 1, 10, 4)
+    obj = st.text_input("Objetivo (Ex: OAB)")
+    if st.button("Gerar"):
+        res = call_ai(f"Crie cronograma semanal para {obj} com {h}h/dia.")
+        st.write(res)
+        add_xp(20)
 
 # --- MENTOR ---
-elif menu_opcao == "💬 Mentor Jurídico":
+elif menu == "💬 Mentor Jurídico":
     st.title("💬 Mentor Jurídico")
-    perfil = st.selectbox("Perfil", ["Professor Didático", "Doutrinador (Técnico)", "Jurisprudencial"])
-    if "chat" not in st.session_state: st.session_state.chat = []
-    for m in st.session_state.chat: st.chat_message(m["role"]).write(m["content"])
-    
-    if p := st.chat_input("Dúvida..."):
-        st.session_state.chat.append({"role":"user", "content":p})
-        st.chat_message("user").write(p)
-        with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                sys = f"Atue como {perfil}. Cite leis."
-                r = processar_ia(p, system_instruction=sys)
-                st.write(r)
-                st.session_state.chat.append({"role":"assistant", "content":r})
-                add_xp(5)
-    
-    st.markdown("---")
-    st.markdown("### ✅ Checklist de Riscos")
-    caso = st.text_area("Descreva o caso")
-    if st.button("Gerar Checklist"):
-        r = processar_ia(f"Gere checklist de riscos para: {caso}", temperature=0.2)
-        st.write(r)
+    if p:=st.chat_input("Dúvida?"):
+        res = call_ai(p, system="Seja um professor de direito didático.")
+        st.write(res)
 
-# --- CONTRATOS ---
-elif menu_opcao == "📄 Redação de Contratos":
-    st.title("📄 Redação de Contratos")
-    tipo = st.selectbox("Tipo", ["Contrato", "Petição", "Procuração"])
-    c1, c2 = st.columns(2)
-    pa = c1.text_input("Parte A")
-    pb = c2.text_input("Parte B")
-    detalhes = st.text_area("Detalhes")
-    if st.button("Redigir"):
-        if pa and pb and detalhes:
-            with st.spinner("Escrevendo..."):
-                prompt = f"Redija {tipo}. Parte A: {pa}. Parte B: {pb}. Detalhes: {detalhes}. Formal."
-                r = processar_ia(prompt, temperature=0.2)
-                st.text_area("Minuta", r, height=400)
-                if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), f"{tipo}.docx")
-                add_xp(20)
-        else: st.error("Preencha os campos.")
+# --- REDAÇÃO ---
+elif menu == "📄 Redação":
+    st.title("📄 Redação Jurídica")
+    tipo = st.selectbox("Documento", ["Contrato", "Petição"])
+    det = st.text_area("Detalhes")
+    if st.button("Escrever"):
+        st.write(call_ai(f"Escreva {tipo}: {det}"))
 
-# --- CARTÓRIO OCR ---
-elif menu_opcao == "🏢 Cartório Digital (OCR)":
+# --- OCR ---
+elif menu == "🏢 Cartório OCR":
     st.title("🏢 Cartório Digital")
-    st.info("Usa Visão Computacional para transcrever certidões.")
-    u = st.file_uploader("Imagem da Certidão", type=["jpg", "png", "pdf"])
-    if u and st.button("Transcrever Inteiro Teor"):
-        with st.spinner("Lendo..."):
-            file_bytes = u.getvalue()
-            if PIL_AVAILABLE and u.type in ["image/jpeg", "image/png"]:
-                try:
-                    img = Image.open(BytesIO(file_bytes)).convert("L")
-                    img = ImageOps.autocontrast(img)
-                    buf = BytesIO(); img.save(buf, format="PNG")
-                    file_bytes = buf.getvalue()
-                except: pass
-            
-            r = processar_ia("Transcreva fielmente como Inteiro Teor. Indique [Selo], [Assinatura].", file_bytes=file_bytes, task_type="vision")
-            st.text_area("Resultado", r, height=400)
-            if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), "InteiroTeor.docx")
-            add_xp(25)
+    u = st.file_uploader("Imagem")
+    if u and st.button("Ler"):
+        st.write(call_ai("Transcreva.", file_bytes=u.getvalue(), type="vision"))
 
 # --- TRANSCRIÇÃO ---
-elif menu_opcao == "🎙️ Transcrição":
+elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
-    tab_mic, tab_up = st.tabs(["🎤 Gravar", "📂 Upload"])
-    with tab_mic:
-        audio = st.audio_input("Gravar")
-        if audio and st.button("Transcrever Gravação"):
-            with st.spinner("Processando..."):
-                r = processar_ia("", file_bytes=audio.getvalue(), task_type="audio")
-                st.write(r)
-                if criar_docx(r): st.download_button("Download", criar_docx(r), "Audio.docx")
-                summ = processar_ia(f"Resuma: {r}")
-                st.info("Resumo:"); st.write(summ)
-                add_xp(20)
-    with tab_up:
-        upl = st.file_uploader("Arquivo", type=["mp3","wav","m4a"])
-        if upl and st.button("Transcrever Arquivo"):
-            with st.spinner("Processando..."):
-                r = processar_ia("", file_bytes=upl.getvalue(), task_type="audio")
-                st.write(r)
-                summ = processar_ia(f"Resuma: {r}")
-                st.info("Resumo:"); st.write(summ)
-                add_xp(20)
+    a = st.audio_input("Gravar")
+    if a and st.button("Transcrever"):
+        st.write(call_ai("", file_bytes=a.getvalue(), type="audio"))
 
 # --- FEEDBACK ---
-elif menu_opcao == "⭐ Feedback":
+elif menu == "⭐ Feedback":
     st.title("⭐ Feedback")
-    with st.form("feed"):
-        nota = st.slider("Nota", 1, 5, 5)
-        txt = st.text_area("Comentário")
-        if st.form_submit_button("Enviar"):
-            st.balloons()
-            st.success("Enviado!")
-            add_xp(50)
-
-# --- LOGS ---
-elif menu_opcao == "📊 Logs":
-    st.title("📊 Logs")
-    if st.session_state.logs:
-        for l in st.session_state.logs[-20:]:
-            st.code(f"{l['timestamp']} | {l['task_type']} | {l['status']}")
-    else: st.info("Sem logs.")
+    st.write("Envie sua sugestão!")
 
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v11.0 Stable")
+    st.write("Carmélio AI - v14.0 Master")
     st.write("Desenvolvido por Arthur Carmélio.")
