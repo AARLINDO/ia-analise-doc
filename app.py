@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components # Necessário para integrar sites
 import os
 import json
 import base64
@@ -16,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Importações seguras (Fallback)
+# Importações seguras
 try: from groq import Groq
 except ImportError: Groq = None
 
@@ -30,20 +31,20 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 2. FUNÇÕES DE COMPATIBILIDADE (FIX DE ERROS)
+# 2. FUNÇÕES DE COMPATIBILIDADE
 # =============================================================================
 
 def safe_image_show(image_path):
-    """Exibe imagem sem quebrar em versões antigas do Streamlit"""
     if os.path.exists(image_path):
-        try:
-            st.image(image_path, use_container_width=True)
-        except TypeError:
-            # Versões antigas usam use_column_width
-            st.image(image_path, use_column_width=True)
+        try: st.image(image_path, use_container_width=True)
+        except TypeError: st.image(image_path, use_column_width=True)
+
+def get_audio_input(label):
+    if hasattr(st, "audio_input"):
+        return st.audio_input(label)
     else:
-        # Se não tiver logo, segue o jogo sem erro
-        pass
+        st.warning("⚠️ Seu sistema não suporta gravação direta. Use o upload abaixo.")
+        return st.file_uploader(label, type=["wav", "mp3", "m4a", "ogg"])
 
 # =============================================================================
 # 3. CSS E DESIGN
@@ -52,37 +53,19 @@ st.markdown("""
 <style>
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
-    
     .gemini-text {
         background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 800; font-size: 2.2rem; margin-bottom: 10px;
     }
-    
-    .timer-display {
-        font-family: monospace; font-size: 80px; font-weight: 700;
-        color: #FFFFFF; text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
-    }
-    .timer-container {
-        background-color: #1F2430; border-radius: 20px; padding: 20px;
-        text-align: center; border: 1px solid #2B2F3B; margin: 20px auto;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 500px;
-    }
-    
     .footer-credits {
         text-align: center; margin-top: 40px; padding-top: 20px;
         border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 12px;
     }
     .footer-name { color: #E5E7EB; font-weight: 700; font-size: 14px; display: block; margin-top: 5px; }
-    
     .stButton>button { border-radius: 12px; font-weight: 600; border: none; }
-    .question-card { 
-        background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
-        padding: 20px; border-radius: 15px; border: 1px solid #374151; margin-bottom: 10px; 
-    }
-    
-    /* Fix para área de texto */
-    textarea { font-size: 1rem !important; }
+    /* Ajuste para iframes ocuparem largura total */
+    iframe { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,14 +110,12 @@ def extract_json_safe(text):
 # 5. MOTOR DE IA (GROQ)
 # =============================================================================
 def get_client():
-    # Tenta pegar dos secrets ou env
     try:
         api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
         if not api_key: return None
         if Groq is None: return None
         return Groq(api_key=api_key)
-    except:
-        return None
+    except: return None
 
 def stream_text(text):
     for word in text.split(" "):
@@ -143,10 +124,8 @@ def stream_text(text):
 
 def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, assistente jurídico.", temp=0.5):
     if check_rate_limit(): return None
-    
     client = get_client()
-    if not client: 
-        return "⚠️ Erro: API Key da Groq não configurada."
+    if not client: return "⚠️ Erro: API Key não configurada."
     
     mark_call()
     try:
@@ -155,7 +134,6 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
                 msgs = [{"role":"system","content":system}, {"role":"user","content":messages_or_prompt}]
             else:
                 msgs = [{"role":"system","content":system}] + messages_or_prompt
-
             r = client.chat.completions.create(messages=msgs, model="llama-3.3-70b-versatile", temperature=temp)
             return r.choices[0].message.content
             
@@ -169,7 +147,6 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
             
         elif type == "audio" and file_bytes:
             import tempfile
-            # Salva temporariamente para enviar pra API
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                 tmp.write(file_bytes); tmp_path = tmp.name
             with open(tmp_path, "rb") as f:
@@ -180,33 +157,23 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
             os.unlink(tmp_path)
             return transcription
             
-    except Exception as e:
-        return f"Erro na IA: {str(e)}"
+    except Exception as e: return f"Erro na IA: {str(e)}"
 
 # =============================================================================
 # 6. SIDEBAR
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
-    
     st.markdown("---")
-    
     menu = st.radio("Menu Principal:", 
         ["✨ Chat Inteligente", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "📄 Redação Jurídica", "🏢 Cartório OCR", "🎙️ Transcrição"],
         label_visibility="collapsed"
     )
-    
     st.markdown("---")
     c_link, c_zap = st.columns(2)
     with c_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
     with c_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
-
-    st.markdown("""
-    <div class="footer-credits">
-        Desenvolvido por <br>
-        <span class="footer-name">Arthur Carmélio</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="footer-credits">Desenvolvido por <br><span class="footer-name">Arthur Carmélio</span></div>""", unsafe_allow_html=True)
 
 # LGPD
 if not st.session_state.lgpd_ack:
@@ -224,7 +191,6 @@ if not st.session_state.lgpd_ack:
 # --- 1. CHAT INTELIGENTE ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Olá, Doutor(a).</h1>', unsafe_allow_html=True)
-    
     if not st.session_state.chat_history:
         st.caption("Sou o Carmélio AI. Posso ajudar com dúvidas, peças, estudos ou jurisprudência.")
         c1, c2 = st.columns(2)
@@ -242,7 +208,6 @@ if menu == "✨ Chat Inteligente":
     if prompt := st.chat_input("Digite sua mensagem..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.write(prompt)
-        
         with st.chat_message("assistant"):
             with st.spinner("Analisando..."):
                 context_msgs = st.session_state.chat_history[-6:]
@@ -258,7 +223,6 @@ if menu == "✨ Chat Inteligente":
 # --- 2. MESTRE DOS EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
-    
     with st.expander("📂 Upload do Edital (Contexto)", expanded=not bool(st.session_state.edital_text)):
         file = st.file_uploader("Arraste seu PDF/DOCX", type=["pdf", "docx"])
         if file:
@@ -272,28 +236,22 @@ elif menu == "🎯 Mestre dos Editais":
                 st.session_state.edital_text = raw
                 st.success("Edital carregado! A IA usará este contexto.")
                 st.rerun()
-
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
     banca = c1.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
     disc = c2.selectbox("Disciplina", ["Constitucional", "Administrativo", "Penal", "Civil"])
     assunto = c3.text_input("Assunto", "Atos Administrativos")
-
     if st.button("🚀 Gerar Questão Inédita", type="primary", use_container_width=True):
         with st.spinner("Criando..."):
             ctx = st.session_state.edital_text[:3000] if st.session_state.edital_text else ""
             p = f"Crie uma questão inédita (JSON). Banca: {banca}. Disciplina: {disc}. Assunto: {assunto}. Contexto Edital: {ctx}. Formato: <json>{{'enunciado':'...', 'alternativas':{{'A':'...','B':'...'}}, 'gabarito':'A', 'comentario':'...'}}</json>"
             res = call_ai(p, temp=0.5)
             data = extract_json_safe(res)
-            
-            if data:
-                st.session_state.generated_questions.append(data)
-    
+            if data: st.session_state.generated_questions.append(data)
     if st.session_state.generated_questions:
         q = st.session_state.generated_questions[-1]
-        st.markdown(f"<div class='question-card'><strong>{banca} | {disc}</strong><br><br>{q.get('enunciado')}</div>", unsafe_allow_html=True)
-        for k,v in q.get("alternativas", {}).items():
-            st.write(f"**{k})** {v}")
+        st.markdown(f"<div style='background:#1F2937;padding:20px;border-radius:10px;margin-bottom:10px;'><strong>{banca} | {disc}</strong><br><br>{q.get('enunciado')}</div>", unsafe_allow_html=True)
+        for k,v in q.get("alternativas", {}).items(): st.write(f"**{k})** {v}")
         with st.expander("Ver Gabarito"):
             st.success(f"Gabarito: {q.get('gabarito')}")
             st.info(q.get("comentario"))
@@ -302,26 +260,22 @@ elif menu == "🎯 Mestre dos Editais":
 elif menu == "🍅 Sala de Foco":
     st.title("🍅 Foco & Produtividade")
     col_modes = st.columns([1,1,1])
-    
     def set_pomo(mode, min):
         st.session_state.pomo_mode = mode
         st.session_state.pomo_duration = min * 60
         st.session_state.pomo_state = "STOPPED"
         st.session_state.pomo_end_time = None
         st.rerun()
-
     if col_modes[0].button("🧠 FOCO (25m)", use_container_width=True): set_pomo("Foco", 25)
     if col_modes[1].button("☕ CURTO (5m)", use_container_width=True): set_pomo("Descanso", 5)
     if col_modes[2].button("🧘 LONGO (15m)", use_container_width=True): set_pomo("Longo", 15)
-
+    
     remaining = st.session_state.pomo_duration
     if st.session_state.pomo_state == "RUNNING":
         now = time.time()
         if now >= st.session_state.pomo_end_time:
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
-            
-            # Auto start (usando chave do widget)
             if st.session_state.get("pomo_auto_start"):
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
                 next_min = 5 if next_mode == "Descanso" else 25
@@ -331,22 +285,15 @@ elif menu == "🍅 Sala de Foco":
                 st.session_state.pomo_state = "RUNNING"
                 time.sleep(2)
                 st.rerun()
-            else:
-                remaining = 0
+            else: remaining = 0
         else:
             remaining = int(st.session_state.pomo_end_time - now)
             time.sleep(1)
             st.rerun()
-
-    mins, secs = divmod(remaining, 60)
     
-    st.markdown(f"""
-    <div class="timer-container">
-        <div style="color: #60A5FA; letter-spacing: 3px; margin-bottom: 10px;">{st.session_state.pomo_mode.upper()}</div>
-        <div class="timer-display">{mins:02d}:{secs:02d}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    mins, secs = divmod(remaining, 60)
+    st.markdown(f"<div style='text-align:center;font-size:80px;font-weight:bold;color:white;margin:20px 0;'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+    
     c1, c2, c3 = st.columns(3)
     if c1.button("▶️ INICIAR", use_container_width=True, type="primary"):
         if st.session_state.pomo_state != "RUNNING":
@@ -362,31 +309,40 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_state = "STOPPED"
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
-
-    # Correção do SyntaxError e funcionalidade
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
-    
-    with st.expander("🎵 Rádio Lofi", expanded=False):
-        st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+    with st.expander("🎵 Rádio Lofi", expanded=False): st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
 
-# --- 4. REDAÇÃO ---
+# --- 4. REDAÇÃO (AGORA INTEGRADA) ---
 elif menu == "📄 Redação Jurídica":
     st.title("📄 Redação Jurídica")
-    st.info("Descreva o caso e a IA redige a peça para você.")
     
-    c1, c2 = st.columns([1, 2])
-    tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
+    # Abas para separar a IA Carmélio da Plataforma Externa
+    tab_ia, tab_ext = st.tabs(["✨ Gerador Interno (Carmélio)", "🔗 Plataforma Jurídico AI"])
     
-    # Fix do problema de "colar texto": adicionei key única
-    det = c2.text_area("Fatos e Detalhes", height=150, key="redacao_detalhes")
-    
-    if st.button("✍️ Gerar Minuta"):
-        if det:
+    # ABA 1: IA INTERNA (Para usar sua própria IA)
+    with tab_ia:
+        st.info("Descreva o caso e a IA Carmélio redige a peça aqui mesmo.")
+        c1, c2 = st.columns([1, 2])
+        tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
+        det = c2.text_area("Fatos e Detalhes", height=150, key="redacao_detalhes")
+        if st.button("✍️ Gerar Minuta"):
             with st.spinner("Escrevendo..."):
                 res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
                 st.text_area("Minuta:", res, height=500)
-        else:
-            st.warning("Por favor, descreva os fatos antes de gerar.")
+
+    # ABA 2: PLATAFORMA EXTERNA (O que você pediu)
+    with tab_ext:
+        st.markdown("### Integração Jurídico AI")
+        st.caption("Acesse diretamente a plataforma Jurídico AI sem sair do Carmélio.")
+        
+        # Botão de segurança (caso o iframe não carregue)
+        st.link_button("🔗 Abrir Jurídico AI em Nova Aba", "https://app.juridico.ai/contrato")
+        
+        # Tenta carregar a plataforma dentro do seu app
+        try:
+            components.iframe("https://app.juridico.ai/contrato", height=800, scrolling=True)
+        except Exception:
+            st.error("A plataforma externa não permitiu o carregamento aqui. Use o botão acima.")
 
 # --- 5. OCR ---
 elif menu == "🏢 Cartório OCR":
@@ -402,10 +358,8 @@ elif menu == "🏢 Cartório OCR":
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
     
-    # Abas para separar Gravação ao Vivo de Upload de Arquivo
     tab_upload, tab_mic = st.tabs(["📂 Upload de Arquivo", "🎤 Microfone"])
     
-    # 1. Upload de Arquivo (Funciona Sempre)
     with tab_upload:
         st.info("Ideal para músicas, atas gravadas ou reuniões longas.")
         audio_upload = st.file_uploader("Solte o áudio aqui (mp3, wav, m4a)", type=["mp3", "wav", "m4a", "ogg"])
@@ -416,9 +370,9 @@ elif menu == "🎙️ Transcrição":
                     st.success("Transcrição Concluída:")
                     st.text_area("Resultado:", res, height=300)
 
-    # 2. Microfone (Com verificação de versão)
     with tab_mic:
         st.info("Ideal para ditados rápidos.")
+        # Verificação de segurança
         if hasattr(st, "audio_input"):
             audio_mic = st.audio_input("Clique para gravar")
             if audio_mic:
