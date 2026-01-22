@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Importações seguras
+# Importações seguras (Evita erro se faltar lib)
 try: import pdfplumber
 except ImportError: pdfplumber = None
 try: import docx as docx_reader
@@ -85,8 +85,8 @@ DEFAULTS = {
     "pomo_state": "STOPPED", 
     "pomo_mode": "Foco", 
     "pomo_duration": 25 * 60, 
-    "pomo_end_time": None, 
-    "pomo_auto_start": False
+    "pomo_end_time": None,
+    # Atenção: pomo_auto_start é gerenciado pelo widget key, não precisa default aqui se usar key
 }
 
 for key, value in DEFAULTS.items():
@@ -173,7 +173,7 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
 # 4. SIDEBAR
 # =============================================================================
 with st.sidebar:
-    # 1. LOGO (Carregamento Seguro)
+    # 1. LOGO (Com Fallback para evitar erro)
     if os.path.exists("logo.jpg.png"):
         try:
             st.image("logo.jpg.png", use_container_width=True)
@@ -198,7 +198,7 @@ with st.sidebar:
     with c_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
     with c_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
 
-    # 4. CRÉDITOS (Abaixo de tudo)
+    # 4. CRÉDITOS
     st.markdown("""
     <div class="footer-credits">
         Desenvolvido por <br>
@@ -322,7 +322,8 @@ elif menu == "🍅 Sala de Foco":
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
             
-            if st.session_state.pomo_auto_start:
+            # Verifica se o checkbox de auto-start está marcado (usando get para evitar erro)
+            if st.session_state.get("pomo_auto_start"):
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
                 next_min = 5 if next_mode == "Descanso" else 25
                 st.session_state.pomo_mode = next_mode
@@ -363,7 +364,7 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    # CORREÇÃO DO SINTAX ERROR AQUI (USANDO KEY)
+    # Correção do SyntaxError: Checkbox apenas com key
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     
     with st.expander("🎵 Rádio Lofi", expanded=False):
@@ -393,13 +394,24 @@ elif menu == "🏢 Cartório OCR":
             res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
             st.text_area("Texto:", res, height=400)
 
-# --- 6. TRANSCRIÇÃO ---
+# --- 6. TRANSCRIÇÃO (COM FALLBACK) ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
     st.info("Grave áudios e converta em texto.")
-    a = st.audio_input("Gravar")
-    if a:
-        with st.spinner("Transcrevendo..."):
-            res = call_ai("", file_bytes=a.getvalue(), type="audio")
-            st.success("Texto:")
-            st.write(res)
+    
+    # Tratamento para evitar AttributeError em versões antigas
+    audio_file = None
+    try:
+        audio_file = st.audio_input("Gravar")
+    except AttributeError:
+        st.warning("⚠️ Seu sistema não suporta gravação direta. Use o upload abaixo.")
+        audio_file = st.file_uploader("Upload de Áudio", type=["wav", "mp3", "m4a"])
+
+    if audio_file:
+        # Se for st.audio_input (retorna objeto) ou file_uploader (retorna objeto)
+        # O método getvalue() funciona em ambos
+        if st.button("Transcrever"):
+            with st.spinner("Transcrevendo..."):
+                res = call_ai("", file_bytes=audio_file.getvalue(), type="audio")
+                st.success("Texto:")
+                st.write(res)
