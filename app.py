@@ -32,7 +32,7 @@ st.markdown("""
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* CAIXAS DE EXPLICAÇÃO */
+    /* CAIXAS DE EXPLICAÇÃO (Info Boxes) */
     .stAlert { background-color: #1F2937; color: #E5E7EB; border: 1px solid #374151; }
     
     /* POMODORO TIMER */
@@ -64,10 +64,22 @@ st.markdown("""
         transform: scale(1.02);
     }
 
-    /* PERFIL */
-    .profile-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
-    .profile-dev { font-size: 12px; color: #9CA3AF; margin-bottom: 2px; }
-    .profile-name { font-weight: 700; font-size: 20px; color: #FFFFFF; }
+    /* CRÉDITOS NO RODAPÉ */
+    .footer-credits {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #2B2F3B;
+        color: #9CA3AF;
+        font-size: 12px;
+    }
+    .footer-name {
+        color: #FFFFFF;
+        font-weight: 700;
+        font-size: 14px;
+        display: block;
+        margin-top: 5px;
+    }
     
     /* CARDS */
     .question-card { background-color: #1F2430; padding: 25px; border-radius: 12px; border-left: 4px solid #3B82F6; margin-bottom: 15px; }
@@ -103,14 +115,11 @@ def check_rate_limit():
 def mark_call():
     st.session_state.last_heavy_call = time.time()
 
+# Mantemos a função para não quebrar chamadas, mas sem exibir visualmente o nível
 def add_xp(amount):
     st.session_state.user_xp += amount
-    new_level = (st.session_state.user_xp // 100) + 1
-    if new_level > st.session_state.user_level:
-        st.toast(f"🎉 Nível {new_level} alcançado!", icon="🆙")
-        st.session_state.user_level = new_level
-    else:
-        st.toast(f"+{amount} XP", icon="⭐")
+    # Opcional: Manter apenas o toast de sucesso se desejar feedback de ação
+    # st.toast(f"Ação concluída!", icon="✅")
 
 def extract_json_safe(text):
     match = re.search(r"<json>(.*?)</json>", text, re.DOTALL)
@@ -181,37 +190,37 @@ def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente
         return f"Erro na IA: {e}"
 
 # =============================================================================
-# 4. SIDEBAR
+# 4. SIDEBAR REORGANIZADA
 # =============================================================================
 with st.sidebar:
-    # LOGO
+    # 1. LOGO
     try: st.image("logo.jpg.png", use_container_width=True)
     except: pass
     
-    # PERFIL SIMPLIFICADO
-    st.markdown("""
-    <div class="profile-box">
-        <div class="profile-dev">Desenvolvido por</div>
-        <div class="profile-name">Arthur Carmélio</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # GAMIFICAÇÃO DISCRETA
-    c1, c2 = st.columns(2)
-    c1.metric("Nível", st.session_state.user_level)
-    c2.metric("XP", st.session_state.user_xp)
-    st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
-    
     st.markdown("---")
     
-    # NAVEGAÇÃO CLARA
-    menu = st.radio("Selecione a Ferramenta:", 
+    # 2. MENU DE NAVEGAÇÃO
+    menu = st.radio("Navegação:", 
         ["🎯 Mestre dos Editais", "🍅 Sala de Foco", "💬 Mentor Jurídico", "📄 Redação & Peças", "⚡ Flashcards", "📅 Cronograma", "🏢 Cartório OCR", "🎙️ Transcrição"],
         label_visibility="collapsed"
     )
     
     st.markdown("---")
-    st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
+    
+    # 3. SUPORTE / REDES
+    c_link, c_zap = st.columns(2)
+    with c_link:
+        st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
+    with c_zap:
+        st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
+
+    # 4. CRÉDITOS NO RODAPÉ
+    st.markdown("""
+    <div class="footer-credits">
+        Desenvolvido por
+        <span class="footer-name">Arthur Carmélio</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 # LGPD Bloqueio
 if not st.session_state.lgpd_ack:
@@ -226,20 +235,17 @@ if not st.session_state.lgpd_ack:
 # 5. MÓDULOS (COM EXPLICAÇÕES DIDÁTICAS)
 # =============================================================================
 
-# --- MESTRE DOS EDITAIS (O CORAÇÃO DO SISTEMA) ---
+# --- MESTRE DOS EDITAIS ---
 if menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais & Questões")
     
-    # Explicação Didática
     st.info("""
-    **Para que serve:** Esta é a sua central de estratégia. Aqui você transforma um edital PDF gigante em um plano de ação.
-    
-    1. **Suba seu Edital:** A IA vai ler o arquivo e entender o que cai na prova.
-    2. **Verticalize:** Crie uma lista organizada dos tópicos.
-    3. **Treine:** Gere questões inéditas baseadas *exatamente* no seu edital.
+    **Como funciona:**
+    1. **Upload:** Envie o PDF do seu edital.
+    2. **Análise:** A IA lê o conteúdo e identifica os tópicos.
+    3. **Treino:** Gera questões personalizadas focadas exatamente no que cai na sua prova.
     """)
 
-    # Área de Upload
     with st.container():
         c_up, c_btn = st.columns([2, 1])
         with c_up:
@@ -251,7 +257,6 @@ if menu == "🎯 Mestre dos Editais":
                     st.session_state.edital_text = ""
                     st.rerun()
 
-    # Lógica de Leitura
     if file and not st.session_state.edital_text:
         with st.spinner("🔍 A IA está lendo cada linha do seu edital..."):
             raw = "Conteúdo..."
@@ -264,16 +269,12 @@ if menu == "🎯 Mestre dos Editais":
             st.session_state.edital_text = raw
             st.rerun()
 
-    # Área de Ação
     st.markdown("---")
     st.subheader("📚 O que você quer fazer agora?")
     
     tab_treino, tab_vert = st.tabs(["📝 Criar Questões de Prova", "📊 Verticalizar Conteúdo"])
     
     with tab_treino:
-        st.write("A IA criará questões focadas no seu objetivo.")
-        
-        # Se tem edital, foca nele. Se não, modo livre.
         modo_treino = "🎯 Focado no Edital" if st.session_state.edital_text else "🎲 Modo Livre (Sem Edital)"
         st.caption(f"Modo Atual: **{modo_treino}**")
         
@@ -300,7 +301,6 @@ if menu == "🎯 Mestre dos Editais":
                 else:
                     st.error("A IA não conseguiu gerar. Tente mudar o assunto.")
 
-        # Exibição da Questão
         if 'q_atual' in st.session_state:
             q = st.session_state.q_atual
             st.markdown(f"<div class='question-card'><h5>{banca} | {disc}</h5><p style='font-size:18px; color:white;'>{q.get('enunciado')}</p></div>", unsafe_allow_html=True)
@@ -329,11 +329,8 @@ elif menu == "🍅 Sala de Foco":
     st.title("🍅 Sala de Foco & Produtividade")
     
     st.info("""
-    **Para que serve:** O método Pomodoro divide seu tempo em blocos de foco intenso e descanso.
-    Isso mantém seu cérebro descansado e aumenta a retenção do conteúdo estudado.
-    
-    * **Foco (25m):** Estude sem interrupções.
-    * **Descanso (5m):** Levante, beba água, estique as pernas.
+    **Método Pomodoro:**
+    Ciclos de foco intenso intercalados com pausas breves para maximizar a retenção e evitar a fadiga mental.
     """)
     
     # 1. Seletor de Modo
@@ -414,8 +411,8 @@ elif menu == "🍅 Sala de Foco":
 elif menu == "💬 Mentor Jurídico":
     st.title("💬 Mentor Jurídico 24h")
     st.info("""
-    **Para que serve:** Tire dúvidas sobre qualquer matéria jurídica. A IA atua como um professor especialista.
-    **Exemplo:** "Qual a diferença entre Dolo Eventual e Culpa Consciente?" ou "Resuma o Art. 5º da CF."
+    **O que é:** Um assistente jurídico treinado em legislação e doutrina.
+    **Como usar:** Digite sua dúvida (ex: "Qual a diferença entre Dolo e Culpa?") e receba uma explicação didática com base legal.
     """)
     
     if p:=st.chat_input("Digite sua dúvida jurídica aqui..."):
@@ -430,8 +427,8 @@ elif menu == "💬 Mentor Jurídico":
 elif menu == "📄 Redação & Peças":
     st.title("📄 Redação Jurídica Inteligente")
     st.info("""
-    **Para que serve:** Crie minutas de contratos, petições ou procurações em segundos.
-    Apenas descreva o caso e a IA montará a estrutura formal completa para você revisar.
+    **O que é:** Um gerador de minutas para advogados e estagiários.
+    **Como usar:** Escolha o tipo de documento, descreva o caso e a IA montará a estrutura formal completa.
     """)
     
     tipo = st.selectbox("O que vamos redigir?", ["Contrato de Honorários", "Petição Inicial", "Contestação", "Procuração Ad Judicia", "Habeas Corpus"])
@@ -445,13 +442,13 @@ elif menu == "📄 Redação & Peças":
 
 # --- FLASHCARDS ---
 elif menu == "⚡ Flashcards":
-    st.title("⚡ Flashcards (Repetição Espaçada)")
+    st.title("⚡ Flashcards (Estudo Ativo)")
     st.info("""
-    **Para que serve:** A melhor técnica para memorizar prazos e conceitos.
-    Crie cartões com Pergunta (Frente) e Resposta (Verso) e revise-os periodicamente.
+    **O que é:** Ferramenta de memorização baseada em "Repetição Espaçada".
+    **Como usar:** Peça para a IA criar um card sobre um tema (ex: "Prazos Penais") e tente responder antes de virar a carta.
     """)
     
-    tema = st.text_input("Sobre o que você quer criar um card? (Ex: Prazos Penais)")
+    tema = st.text_input("Sobre o que você quer criar um card?")
     if st.button("Criar Card com IA"):
         res = call_ai(f"Crie um flashcard difícil sobre {tema}. Retorne JSON <json>{{'front':'PERGUNTA', 'back':'RESPOSTA'}}</json>")
         data = extract_json_safe(res)
@@ -469,7 +466,7 @@ elif menu == "⚡ Flashcards":
 # --- CRONOGRAMA ---
 elif menu == "📅 Cronograma":
     st.title("📅 Planejador de Estudos")
-    st.info("**Para que serve:** A IA organiza sua rotina. Diga quantas horas você tem e qual seu objetivo, e ela monta um quadro de horários.")
+    st.info("**O que é:** Um organizador automático de rotina baseado no seu tempo disponível.")
     
     h = st.slider("Horas disponíveis por dia:", 1, 10, 4)
     obj = st.text_input("Objetivo (Ex: OAB 40, Concurso TJSP):")
@@ -483,7 +480,8 @@ elif menu == "📅 Cronograma":
 # --- OCR ---
 elif menu == "🏢 Cartório OCR":
     st.title("🏢 Cartório Digital (OCR)")
-    st.info("**Para que serve:** Transforme fotos de certidões antigas ou documentos físicos em texto digital editável (Word/Bloco de Notas).")
+    st.info("**O que é:** Tecnologia de visão computacional para ler documentos.")
+    st.caption("**Como usar:** Envie a foto de uma certidão antiga ou documento físico e receba o texto digitado.")
     
     u = st.file_uploader("Envie a foto ou PDF", type=["jpg","png","pdf"])
     if u and st.button("Extrair Texto"):
@@ -495,7 +493,8 @@ elif menu == "🏢 Cartório OCR":
 # --- TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição de Áudio")
-    st.info("**Para que serve:** Grave uma aula, uma reunião ou um ditado e a IA transforma o áudio em texto escrito.")
+    st.info("**O que é:** Converte voz em texto.")
+    st.caption("**Como usar:** Grave uma aula, uma reunião com cliente ou um ditado de peça jurídica.")
     
     a = st.audio_input("Gravar Agora")
     if a and st.button("Transcrever"):
@@ -505,17 +504,8 @@ elif menu == "🎙️ Transcrição":
             st.write(res)
             add_xp(20)
 
-# --- FEEDBACK ---
-elif menu == "⭐ Feedback":
-    st.title("⭐ Ajude a melhorar")
-    st.write("Encontrou um erro ou tem uma ideia? Conte para o desenvolvedor.")
-    st.text_area("Sua mensagem:")
-    if st.button("Enviar"):
-        st.balloons()
-        st.success("Obrigado!")
-
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v17.0 Final Explained")
+    st.write("Carmélio AI - v18.0 Final")
     st.write("Desenvolvido por Arthur Carmélio.")
