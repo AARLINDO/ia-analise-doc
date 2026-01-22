@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Tentativa de importação de bibliotecas extras
+# Tentativa de importação de bibliotecas extras (Evita quebrar se faltar algo)
 try: from groq import Groq
 except ImportError: Groq = None
 
@@ -30,27 +30,30 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 2. FUNÇÕES DE COMPATIBILIDADE (CORREÇÃO DE ERROS)
+# 2. FUNÇÕES DE COMPATIBILIDADE (A MÁGICA ANTI-ERRO)
 # =============================================================================
 
 def safe_image_show(image_path):
-    """Exibe imagem compatível com versões novas e antigas do Streamlit"""
+    """Exibe imagem funcionando tanto em Streamlit novo quanto antigo"""
     if os.path.exists(image_path):
         try:
-            # Tenta o comando novo
+            # Tenta o comando novo (v1.39+)
             st.image(image_path, use_container_width=True)
         except TypeError:
-            # Se falhar, usa o comando antigo
+            # Se der erro, usa o comando antigo
             st.image(image_path, use_column_width=True)
     else:
-        st.warning(f"⚠️ Imagem {image_path} não encontrada.")
+        # Se não tiver logo, não faz nada (não mostra erro feio)
+        pass
 
 def get_audio_input(label):
-    """Verifica se o sistema suporta gravação, senão usa upload"""
+    """Detecta se pode gravar áudio. Se não puder, oferece upload."""
     if hasattr(st, "audio_input"):
+        # Versão nova do Streamlit
         return st.audio_input(label)
     else:
-        st.warning("⚠️ Seu navegador/versão não suporta gravação direta. Use o upload abaixo.")
+        # Versão antiga (Fallback)
+        st.warning("⚠️ Seu sistema não suporta gravação direta. Use o upload abaixo.")
         return st.file_uploader(label, type=["wav", "mp3", "m4a", "ogg"])
 
 # =============================================================================
@@ -98,7 +101,8 @@ DEFAULTS = {
     "edital_text": "", "chat_history": [], "generated_questions": [], 
     "lgpd_ack": False, "last_heavy_call": 0.0,
     "pomo_state": "STOPPED", "pomo_mode": "Foco", 
-    "pomo_duration": 25 * 60, "pomo_end_time": None
+    "pomo_duration": 25 * 60, "pomo_end_time": None,
+    "pomo_auto_start": False # Garante que existe
 }
 
 for key, value in DEFAULTS.items():
@@ -132,14 +136,12 @@ def extract_json_safe(text):
 # =============================================================================
 def get_client():
     # Tenta pegar dos secrets ou env
-    api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-    if not api_key: return None
-    
-    if Groq is None: return None # Caso a lib não esteja instalada
-    
     try:
+        api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+        if not api_key: return None
+        if Groq is None: return None
         return Groq(api_key=api_key)
-    except Exception:
+    except:
         return None
 
 def stream_text(text):
@@ -152,7 +154,7 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
     
     client = get_client()
     if not client: 
-        return "⚠️ Erro: API Key da Groq não configurada ou biblioteca ausente."
+        return "⚠️ Erro: API Key da Groq não configurada."
     
     mark_call()
     try:
@@ -326,7 +328,7 @@ elif menu == "🍅 Sala de Foco":
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
             
-            # Auto start lógico (key check)
+            # Auto start
             if st.session_state.get("pomo_auto_start"):
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
                 next_min = 5 if next_mode == "Descanso" else 25
@@ -368,6 +370,7 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
+    # Correção do SyntaxError: Checkbox apenas com key, sem atribuição direta
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     
     with st.expander("🎵 Rádio Lofi", expanded=False):
@@ -400,7 +403,7 @@ elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
     st.info("Grave áudios e converta em texto.")
     
-    # Detecção automática de suporte de áudio
+    # Detecção automática de suporte de áudio (Fallback)
     audio_file = get_audio_input("Gravar Áudio")
     
     if audio_file:
