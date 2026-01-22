@@ -173,9 +173,13 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
 # 4. SIDEBAR
 # =============================================================================
 with st.sidebar:
-    # 1. LOGO
+    # 1. LOGO (Carregamento Seguro)
     if os.path.exists("logo.jpg.png"):
-        st.image("logo.jpg.png", use_container_width=True)
+        try:
+            st.image("logo.jpg.png", use_container_width=True)
+        except TypeError:
+            # Fallback para versões antigas do Streamlit
+            st.image("logo.jpg.png", use_column_width=True)
     else:
         st.warning("⚠️ logo.jpg.png não encontrada")
     
@@ -359,8 +363,8 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    # Correção do erro de sintaxe: usando a chave do widget
-    st.checkbox("🔄 Ciclos automáticos", value=st.session_state.pomo_auto_start, key="pomo_auto_start")
+    # CORREÇÃO DO SINTAX ERROR AQUI (USANDO KEY)
+    st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     
     with st.expander("🎵 Rádio Lofi", expanded=False):
         st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
