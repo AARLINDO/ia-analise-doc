@@ -1,16 +1,14 @@
 import streamlit as st
-from groq import Groq
-from docx import Document
-from io import BytesIO
-from datetime import datetime
+import os
 import json
 import base64
 import time
 import re
-import os
+from datetime import datetime
+from io import BytesIO
 
 # =============================================================================
-# 1. CONFIGURAÇÃO E DESIGN
+# 1. CONFIGURAÇÃO E DEPENDÊNCIAS
 # =============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Suíte Jurídica",
@@ -18,32 +16,59 @@ st.set_page_config(
     layout="wide"
 )
 
-# Importações seguras (Evita erro se faltar lib)
+# Tentativa de importação de bibliotecas extras
+try: from groq import Groq
+except ImportError: Groq = None
+
 try: import pdfplumber
 except ImportError: pdfplumber = None
+
 try: import docx as docx_reader
 except ImportError: docx_reader = None
+
 try: from PIL import Image
 except ImportError: Image = None
 
+# =============================================================================
+# 2. FUNÇÕES DE COMPATIBILIDADE (CORREÇÃO DE ERROS)
+# =============================================================================
+
+def safe_image_show(image_path):
+    """Exibe imagem compatível com versões novas e antigas do Streamlit"""
+    if os.path.exists(image_path):
+        try:
+            # Tenta o comando novo
+            st.image(image_path, use_container_width=True)
+        except TypeError:
+            # Se falhar, usa o comando antigo
+            st.image(image_path, use_column_width=True)
+    else:
+        st.warning(f"⚠️ Imagem {image_path} não encontrada.")
+
+def get_audio_input(label):
+    """Verifica se o sistema suporta gravação, senão usa upload"""
+    if hasattr(st, "audio_input"):
+        return st.audio_input(label)
+    else:
+        st.warning("⚠️ Seu navegador/versão não suporta gravação direta. Use o upload abaixo.")
+        return st.file_uploader(label, type=["wav", "mp3", "m4a", "ogg"])
+
+# =============================================================================
+# 3. CSS E DESIGN
+# =============================================================================
 st.markdown("""
 <style>
-    /* GERAL */
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* TEXTO GEMINI */
     .gemini-text {
         background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 800; font-size: 2.2rem; margin-bottom: 10px;
     }
     
-    /* POMODORO */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
     .timer-display {
-        font-family: 'Roboto Mono', monospace; font-size: 100px; font-weight: 700;
+        font-family: monospace; font-size: 100px; font-weight: 700;
         color: #FFFFFF; text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
     }
     .timer-container {
@@ -51,19 +76,14 @@ st.markdown("""
         text-align: center; border: 1px solid #2B2F3B; margin: 20px auto;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 600px;
     }
-
-    /* RODAPÉ E CRÉDITOS */
+    
     .footer-credits {
         text-align: center; margin-top: 40px; padding-top: 20px;
         border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 12px;
     }
-    .footer-name {
-        color: #E5E7EB; font-weight: 700; font-size: 14px; display: block; margin-top: 5px;
-    }
+    .footer-name { color: #E5E7EB; font-weight: 700; font-size: 14px; display: block; margin-top: 5px; }
     
-    /* BOTÕES E INPUTS */
     .stButton>button { border-radius: 12px; font-weight: 600; border: none; }
-    .stChatInput { border-radius: 20px; border: 1px solid #374151; }
     .question-card { 
         background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
         padding: 20px; border-radius: 15px; border: 1px solid #374151; margin-bottom: 10px; 
@@ -72,21 +92,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 2. GESTÃO DE ESTADO
+# 4. GESTÃO DE ESTADO
 # =============================================================================
-# Inicializa variáveis se não existirem
 DEFAULTS = {
-    "edital_text": "", 
-    "chat_history": [], 
-    "generated_questions": [], 
-    "lgpd_ack": False, 
-    "last_heavy_call": 0.0,
-    # Pomodoro
-    "pomo_state": "STOPPED", 
-    "pomo_mode": "Foco", 
-    "pomo_duration": 25 * 60, 
-    "pomo_end_time": None,
-    # Atenção: pomo_auto_start é gerenciado pelo widget key, não precisa default aqui se usar key
+    "edital_text": "", "chat_history": [], "generated_questions": [], 
+    "lgpd_ack": False, "last_heavy_call": 0.0,
+    "pomo_state": "STOPPED", "pomo_mode": "Foco", 
+    "pomo_duration": 25 * 60, "pomo_end_time": None
 }
 
 for key, value in DEFAULTS.items():
@@ -116,12 +128,19 @@ def extract_json_safe(text):
     return None
 
 # =============================================================================
-# 3. MOTOR DE IA
+# 5. MOTOR DE IA (GROQ)
 # =============================================================================
 def get_client():
-    api_key = st.secrets.get("GROQ_API_KEY")
+    # Tenta pegar dos secrets ou env
+    api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
     if not api_key: return None
-    return Groq(api_key=api_key)
+    
+    if Groq is None: return None # Caso a lib não esteja instalada
+    
+    try:
+        return Groq(api_key=api_key)
+    except Exception:
+        return None
 
 def stream_text(text):
     for word in text.split(" "):
@@ -130,8 +149,10 @@ def stream_text(text):
 
 def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, assistente jurídico.", temp=0.5):
     if check_rate_limit(): return None
+    
     client = get_client()
-    if not client: return "⚠️ Configure a GROQ_API_KEY."
+    if not client: 
+        return "⚠️ Erro: API Key da Groq não configurada ou biblioteca ausente."
     
     mark_call()
     try:
@@ -141,9 +162,7 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
             else:
                 msgs = [{"role":"system","content":system}] + messages_or_prompt
 
-            r = client.chat.completions.create(
-                messages=msgs, model="llama-3.3-70b-versatile", temperature=temp
-            )
+            r = client.chat.completions.create(messages=msgs, model="llama-3.3-70b-versatile", temperature=temp)
             return r.choices[0].message.content
             
         elif type == "vision" and file_bytes:
@@ -167,38 +186,26 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
             return transcription
             
     except Exception as e:
-        return f"Erro na IA: {e}"
+        return f"Erro na IA: {str(e)}"
 
 # =============================================================================
-# 4. SIDEBAR
+# 6. SIDEBAR
 # =============================================================================
 with st.sidebar:
-    # 1. LOGO (Com Fallback para evitar erro)
-    if os.path.exists("logo.jpg.png"):
-        try:
-            st.image("logo.jpg.png", use_container_width=True)
-        except TypeError:
-            # Fallback para versões antigas do Streamlit
-            st.image("logo.jpg.png", use_column_width=True)
-    else:
-        st.warning("⚠️ logo.jpg.png não encontrada")
+    safe_image_show("logo.jpg.png")
     
     st.markdown("---")
     
-    # 2. MENU
     menu = st.radio("Menu Principal:", 
         ["✨ Chat Inteligente", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "📄 Redação Jurídica", "🏢 Cartório OCR", "🎙️ Transcrição"],
         label_visibility="collapsed"
     )
     
     st.markdown("---")
-    
-    # 3. LINKS
     c_link, c_zap = st.columns(2)
     with c_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
     with c_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
 
-    # 4. CRÉDITOS
     st.markdown("""
     <div class="footer-credits">
         Desenvolvido por <br>
@@ -216,10 +223,10 @@ if not st.session_state.lgpd_ack:
     st.stop()
 
 # =============================================================================
-# 5. MÓDULOS
+# 7. MÓDULOS
 # =============================================================================
 
-# --- 1. CHAT INTELIGENTE (HOME) ---
+# --- 1. CHAT INTELIGENTE ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Olá, Doutor(a).</h1>', unsafe_allow_html=True)
     
@@ -233,12 +240,10 @@ if menu == "✨ Chat Inteligente":
             st.session_state.chat_history.append({"role": "user", "content": "Sugira teses de defesa para crime de furto famélico."})
             st.rerun()
 
-    # Histórico
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Input
     if prompt := st.chat_input("Digite sua mensagem..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.write(prompt)
@@ -274,7 +279,6 @@ elif menu == "🎯 Mestre dos Editais":
                 st.rerun()
 
     st.markdown("---")
-    
     c1, c2, c3 = st.columns(3)
     banca = c1.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
     disc = c2.selectbox("Disciplina", ["Constitucional", "Administrativo", "Penal", "Civil"])
@@ -302,8 +306,8 @@ elif menu == "🎯 Mestre dos Editais":
 # --- 3. SALA DE FOCO ---
 elif menu == "🍅 Sala de Foco":
     st.title("🍅 Foco & Produtividade")
-    
     col_modes = st.columns([1,1,1])
+    
     def set_pomo(mode, min):
         st.session_state.pomo_mode = mode
         st.session_state.pomo_duration = min * 60
@@ -322,7 +326,7 @@ elif menu == "🍅 Sala de Foco":
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
             
-            # Verifica se o checkbox de auto-start está marcado (usando get para evitar erro)
+            # Auto start lógico (key check)
             if st.session_state.get("pomo_auto_start"):
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
                 next_min = 5 if next_mode == "Descanso" else 25
@@ -364,7 +368,6 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    # Correção do SyntaxError: Checkbox apenas com key
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     
     with st.expander("🎵 Rádio Lofi", expanded=False):
@@ -374,11 +377,9 @@ elif menu == "🍅 Sala de Foco":
 elif menu == "📄 Redação Jurídica":
     st.title("📄 Redação Jurídica")
     st.info("Descreva o caso e a IA redige a peça para você.")
-    
     c1, c2 = st.columns([1, 2])
     tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
     det = c2.text_area("Fatos e Detalhes", height=100)
-    
     if st.button("✍️ Gerar Minuta"):
         with st.spinner("Escrevendo..."):
             res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
@@ -394,24 +395,18 @@ elif menu == "🏢 Cartório OCR":
             res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
             st.text_area("Texto:", res, height=400)
 
-# --- 6. TRANSCRIÇÃO (COM FALLBACK) ---
+# --- 6. TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
     st.info("Grave áudios e converta em texto.")
     
-    # Tratamento para evitar AttributeError em versões antigas
-    audio_file = None
-    try:
-        audio_file = st.audio_input("Gravar")
-    except AttributeError:
-        st.warning("⚠️ Seu sistema não suporta gravação direta. Use o upload abaixo.")
-        audio_file = st.file_uploader("Upload de Áudio", type=["wav", "mp3", "m4a"])
-
+    # Detecção automática de suporte de áudio
+    audio_file = get_audio_input("Gravar Áudio")
+    
     if audio_file:
-        # Se for st.audio_input (retorna objeto) ou file_uploader (retorna objeto)
-        # O método getvalue() funciona em ambos
-        if st.button("Transcrever"):
+        if st.button("Transcrever Áudio"):
             with st.spinner("Transcrevendo..."):
+                # .getvalue() funciona tanto para file_uploader quanto para audio_input
                 res = call_ai("", file_bytes=audio_file.getvalue(), type="audio")
                 st.success("Texto:")
                 st.write(res)
