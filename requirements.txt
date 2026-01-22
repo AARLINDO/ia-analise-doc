@@ -6,3 +6,4 @@ fpdf
 yt-dlp
 graphviz
 pdfplumber
+Pillow
