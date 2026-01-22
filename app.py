@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Tentativa de importação de bibliotecas extras (Evita quebrar se faltar algo)
+# Importações seguras (Fallback)
 try: from groq import Groq
 except ImportError: Groq = None
 
@@ -30,31 +30,20 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 2. FUNÇÕES DE COMPATIBILIDADE (A MÁGICA ANTI-ERRO)
+# 2. FUNÇÕES DE COMPATIBILIDADE (FIX DE ERROS)
 # =============================================================================
 
 def safe_image_show(image_path):
-    """Exibe imagem funcionando tanto em Streamlit novo quanto antigo"""
+    """Exibe imagem sem quebrar em versões antigas do Streamlit"""
     if os.path.exists(image_path):
         try:
-            # Tenta o comando novo (v1.39+)
             st.image(image_path, use_container_width=True)
         except TypeError:
-            # Se der erro, usa o comando antigo
+            # Versões antigas usam use_column_width
             st.image(image_path, use_column_width=True)
     else:
-        # Se não tiver logo, não faz nada (não mostra erro feio)
+        # Se não tiver logo, segue o jogo sem erro
         pass
-
-def get_audio_input(label):
-    """Detecta se pode gravar áudio. Se não puder, oferece upload."""
-    if hasattr(st, "audio_input"):
-        # Versão nova do Streamlit
-        return st.audio_input(label)
-    else:
-        # Versão antiga (Fallback)
-        st.warning("⚠️ Seu sistema não suporta gravação direta. Use o upload abaixo.")
-        return st.file_uploader(label, type=["wav", "mp3", "m4a", "ogg"])
 
 # =============================================================================
 # 3. CSS E DESIGN
@@ -71,13 +60,13 @@ st.markdown("""
     }
     
     .timer-display {
-        font-family: monospace; font-size: 100px; font-weight: 700;
+        font-family: monospace; font-size: 80px; font-weight: 700;
         color: #FFFFFF; text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
     }
     .timer-container {
-        background-color: #1F2430; border-radius: 20px; padding: 30px;
+        background-color: #1F2430; border-radius: 20px; padding: 20px;
         text-align: center; border: 1px solid #2B2F3B; margin: 20px auto;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 600px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 500px;
     }
     
     .footer-credits {
@@ -91,6 +80,9 @@ st.markdown("""
         background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
         padding: 20px; border-radius: 15px; border: 1px solid #374151; margin-bottom: 10px; 
     }
+    
+    /* Fix para área de texto */
+    textarea { font-size: 1rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -102,7 +94,7 @@ DEFAULTS = {
     "lgpd_ack": False, "last_heavy_call": 0.0,
     "pomo_state": "STOPPED", "pomo_mode": "Foco", 
     "pomo_duration": 25 * 60, "pomo_end_time": None,
-    "pomo_auto_start": False # Garante que existe
+    "pomo_auto_start": False
 }
 
 for key, value in DEFAULTS.items():
@@ -177,6 +169,7 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
             
         elif type == "audio" and file_bytes:
             import tempfile
+            # Salva temporariamente para enviar pra API
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                 tmp.write(file_bytes); tmp_path = tmp.name
             with open(tmp_path, "rb") as f:
@@ -328,7 +321,7 @@ elif menu == "🍅 Sala de Foco":
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
             
-            # Auto start
+            # Auto start (usando chave do widget)
             if st.session_state.get("pomo_auto_start"):
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
                 next_min = 5 if next_mode == "Descanso" else 25
@@ -370,7 +363,7 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    # Correção do SyntaxError: Checkbox apenas com key, sem atribuição direta
+    # Correção do SyntaxError e funcionalidade
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     
     with st.expander("🎵 Rádio Lofi", expanded=False):
@@ -380,13 +373,20 @@ elif menu == "🍅 Sala de Foco":
 elif menu == "📄 Redação Jurídica":
     st.title("📄 Redação Jurídica")
     st.info("Descreva o caso e a IA redige a peça para você.")
+    
     c1, c2 = st.columns([1, 2])
     tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
-    det = c2.text_area("Fatos e Detalhes", height=100)
+    
+    # Fix do problema de "colar texto": adicionei key única
+    det = c2.text_area("Fatos e Detalhes", height=150, key="redacao_detalhes")
+    
     if st.button("✍️ Gerar Minuta"):
-        with st.spinner("Escrevendo..."):
-            res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
-            st.text_area("Minuta:", res, height=500)
+        if det:
+            with st.spinner("Escrevendo..."):
+                res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
+                st.text_area("Minuta:", res, height=500)
+        else:
+            st.warning("Por favor, descreva os fatos antes de gerar.")
 
 # --- 5. OCR ---
 elif menu == "🏢 Cartório OCR":
@@ -398,18 +398,33 @@ elif menu == "🏢 Cartório OCR":
             res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
             st.text_area("Texto:", res, height=400)
 
-# --- 6. TRANSCRIÇÃO ---
+# --- 6. TRANSCRIÇÃO (HÍBRIDA) ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
-    st.info("Grave áudios e converta em texto.")
     
-    # Detecção automática de suporte de áudio (Fallback)
-    audio_file = get_audio_input("Gravar Áudio")
+    # Abas para separar Gravação ao Vivo de Upload de Arquivo
+    tab_upload, tab_mic = st.tabs(["📂 Upload de Arquivo", "🎤 Microfone"])
     
-    if audio_file:
-        if st.button("Transcrever Áudio"):
-            with st.spinner("Transcrevendo..."):
-                # .getvalue() funciona tanto para file_uploader quanto para audio_input
-                res = call_ai("", file_bytes=audio_file.getvalue(), type="audio")
-                st.success("Texto:")
-                st.write(res)
+    # 1. Upload de Arquivo (Funciona Sempre)
+    with tab_upload:
+        st.info("Ideal para músicas, atas gravadas ou reuniões longas.")
+        audio_upload = st.file_uploader("Solte o áudio aqui (mp3, wav, m4a)", type=["mp3", "wav", "m4a", "ogg"])
+        if audio_upload:
+            if st.button("Transcrever Arquivo"):
+                with st.spinner("Processando áudio..."):
+                    res = call_ai("", file_bytes=audio_upload.getvalue(), type="audio")
+                    st.success("Transcrição Concluída:")
+                    st.text_area("Resultado:", res, height=300)
+
+    # 2. Microfone (Com verificação de versão)
+    with tab_mic:
+        st.info("Ideal para ditados rápidos.")
+        if hasattr(st, "audio_input"):
+            audio_mic = st.audio_input("Clique para gravar")
+            if audio_mic:
+                with st.spinner("Transcrevendo..."):
+                    res = call_ai("", file_bytes=audio_mic.getvalue(), type="audio")
+                    st.success("Transcrição Concluída:")
+                    st.text_area("Resultado (Mic):", res, height=300)
+        else:
+            st.warning("⚠️ Seu sistema não suporta gravação direta no navegador. Por favor, use a aba 'Upload de Arquivo'.")
