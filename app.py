@@ -10,7 +10,7 @@ import re
 import os
 
 # =============================================================================
-# 0. DEPENDÊNCIAS OPCIONAIS (PARA EVITAR ERROS NO DEPLOY)
+# 0. DEPENDÊNCIAS
 # =============================================================================
 try:
     import pdfplumber
@@ -31,10 +31,10 @@ except ImportError:
     PIL_AVAILABLE = False
 
 # =============================================================================
-# 1. CONFIGURAÇÃO E DESIGN
+# 1. CONFIGURAÇÃO E DESIGN (PREMIUM CLEAN)
 # =============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Suíte Jurídica Pro",
+    page_title="Carmélio AI | Suíte Jurídica",
     page_icon="logo.jpg.png",
     layout="wide"
 )
@@ -45,39 +45,75 @@ st.markdown("""
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* CARDS */
-    .question-card { background-color: #1F2430; padding: 20px; border-radius: 12px; border-left: 5px solid #3B82F6; margin-bottom: 15px; }
-    .flashcard { background: linear-gradient(135deg, #1F2430 0%, #282C34 100%); padding: 24px; border-radius: 12px; border: 1px solid #3B82F6; text-align: center; }
-    .xp-badge { background-color: #FFD700; color: #000; padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 12px; }
+    /* TIMER GIGANTE (ESTILO POMOFOCUS) */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
     
-    /* POMODORO ESPECÍFICO */
+    .timer-container {
+        background-color: #1F2430; /* Fundo do cartão do timer */
+        border-radius: 20px;
+        padding: 40px;
+        text-align: center;
+        border: 1px solid #2B2F3B;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        margin-bottom: 20px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
     .timer-display {
-        font-size: 100px; font-weight: 800; color: #FFFFFF; text-align: center;
-        text-shadow: 0 0 40px rgba(59, 130, 246, 0.4); margin: 10px 0; font-family: 'Courier New', monospace;
+        font-family: 'Roboto Mono', monospace;
+        font-size: 120px;
+        font-weight: 700;
+        color: #FFFFFF;
+        line-height: 1;
+        margin: 20px 0;
+        text-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
+    
     .timer-label {
-        font-size: 18px; color: #9CA3AF; text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        color: #9CA3AF;
+        margin-bottom: 10px;
     }
-    
-    /* INPUTS & BUTTONS */
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
-        background-color: #161922; border: 1px solid #2B2F3B; color: #E0E7FF; border-radius: 8px;
-    }
+
+    /* BOTÕES CUSTOMIZADOS */
     .stButton>button {
-        width: 100%; border-radius: 8px; height: 45px; font-weight: 600; border: none;
-        background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
-        color: white; transition: 0.3s;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        transition: 0.2s;
     }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4); color: white;}
     
-    /* PERFIL */
-    .profile-box { text-align: center; margin-bottom: 20px; color: #E0E7FF; }
-    .profile-name { font-weight: bold; font-size: 18px; margin-top: 5px; color: #FFFFFF; }
+    /* Botão Principal (Iniciar) - Azul Vibrante */
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        background-color: #3B82F6;
+        color: white;
+        height: 55px;
+        font-size: 20px;
+        box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
+        background-color: #2563EB;
+        transform: translateY(-2px);
+    }
+
+    /* PERFIL LATERAL */
+    .profile-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
+    .profile-name { font-weight: 700; font-size: 18px; color: #FFFFFF; margin-top: 10px; }
+    .profile-role { font-size: 11px; color: #60A5FA; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 5px;}
+    
+    /* CARDS GERAIS */
+    .question-card { background-color: #1F2430; padding: 25px; border-radius: 12px; border-left: 4px solid #3B82F6; margin-bottom: 15px; }
+    
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 2. ESTADO GLOBAL (SESSION STATE)
+# 2. ESTADO GLOBAL
 # =============================================================================
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "user_level" not in st.session_state: st.session_state.user_level = 1
@@ -90,8 +126,8 @@ if "logs" not in st.session_state: st.session_state.logs = []
 if "lgpd_ack" not in st.session_state: st.session_state.lgpd_ack = False
 if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call = 0.0
 
-# Estado Pomodoro
-if "pomo_state" not in st.session_state: st.session_state.pomo_state = "STOPPED" # STOPPED, RUNNING
+# Estado do Pomodoro
+if "pomo_state" not in st.session_state: st.session_state.pomo_state = "STOPPED"
 if "pomo_time_left" not in st.session_state: st.session_state.pomo_time_left = 25 * 60
 if "pomo_mode" not in st.session_state: st.session_state.pomo_mode = "Foco" 
 if "pomo_initial_time" not in st.session_state: st.session_state.pomo_initial_time = 25 * 60
@@ -102,10 +138,10 @@ def add_xp(amount):
     st.session_state.user_xp += amount
     new_level = (st.session_state.user_xp // 100) + 1
     if new_level > st.session_state.user_level:
-        st.toast(f"🎉 PARABÉNS! Você subiu para o Nível {new_level}!", icon="🆙")
+        st.toast(f"🎉 Subiu para Nível {new_level}!", icon="🆙")
         st.session_state.user_level = new_level
     else:
-        st.toast(f"+{amount} XP ganho!", icon="⭐")
+        st.toast(f"+{amount} XP", icon="⭐")
 
 def rate_limited():
     now = time.time()
@@ -122,21 +158,16 @@ def add_log(task_type, model, latency_ms, token_usage, status):
         "token_usage": token_usage, "status": status, "timestamp": datetime.now().isoformat()
     })
 
-# LGPD Modal
 if not st.session_state.lgpd_ack:
-    with st.expander("🔐 LGPD e Termos de Uso (Obrigatório)", expanded=True):
-        st.markdown("""
-        **Bem-vindo ao Carmélio AI**
-        - Seus dados (textos, imagens, áudios) são processados via API Groq e não são armazenados permanentemente.
-        - Ao continuar, você concorda com o uso da ferramenta para fins educacionais e profissionais.
-        """)
-        if st.button("Concordo e Entrar"):
+    with st.expander("🔐 Acesso ao Sistema", expanded=True):
+        st.write("Ao entrar, você concorda com o processamento de dados via IA para fins de estudo.")
+        if st.button("Entrar no Sistema"):
             st.session_state.lgpd_ack = True
             st.rerun()
     st.stop()
 
 # =============================================================================
-# 3. BACKEND (GROQ API)
+# 3. BACKEND (GROQ)
 # =============================================================================
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -160,7 +191,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     if erro: return f"Erro de Configuração: {erro}"
     start = time.time()
     try:
-        # Roteamento Inteligente
         if task_type == "vision":
             model = "llama-3.2-11b-vision-preview"
         elif task_type == "audio":
@@ -168,7 +198,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
         else:
             model = model_override if model_override else "llama-3.3-70b-versatile"
 
-        # Vision
         if task_type == "vision" and file_bytes:
             b64 = base64.b64encode(file_bytes).decode('utf-8')
             content = client.chat.completions.create(
@@ -178,7 +207,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("vision", model, int((time.time()-start)*1000), len(prompt), "ok")
             return content
 
-        # Audio
         elif task_type == "audio" and file_bytes:
             import tempfile
             suffix = ".mp3"
@@ -193,7 +221,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("audio", model, int((time.time()-start)*1000), len(file_bytes), "ok")
             return transcription
 
-        # Text
         else:
             content = client.chat.completions.create(
                 messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
@@ -227,19 +254,18 @@ def extract_json_from_text(text):
     except Exception: return None
 
 # =============================================================================
-# 5. SIDEBAR (PERFIL LIMPO)
+# 5. SIDEBAR
 # =============================================================================
 with st.sidebar:
-    try:
-        st.image("logo.jpg.png", use_container_width=True)
-    except:
-        st.warning("⚠️ Logo não encontrada.")
+    try: st.image("logo.jpg.png", use_container_width=True)
+    except: st.warning("Logo não encontrada.")
     
-    # --- PERFIL LIMPO (SEM CARGO) ---
+    # --- PERFIL FINAL ---
     st.markdown("""
     <div class="profile-box">
-        <small>Desenvolvido por</small><br>
+        <small style="color: #9CA3AF;">Desenvolvido por</small><br>
         <div class="profile-name">Arthur Carmélio</div>
+        <div class="profile-role">ESPECIALISTA NOTARIAL</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -249,13 +275,10 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
 
     st.markdown("---")
-    menu_opcao = st.radio("Menu Principal:",
+    menu_opcao = st.radio("Navegação:",
         ["🎓 Área do Estudante", "💬 Mentor Jurídico", "📄 Redação de Contratos", "🏢 Cartório Digital (OCR)", "🎙️ Transcrição", "⭐ Feedback", "📊 Logs", "👤 Sobre"],
         label_visibility="collapsed"
     )
-
-    with st.expander("🍅 Pomodoro Rápido"):
-        if st.button("Foco 25min"): st.toast("Use a aba Sala de Foco para mais opções!")
 
     st.markdown("---")
     col_link, col_zap = st.columns(2)
@@ -263,19 +286,18 @@ with st.sidebar:
     with col_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720?text=Suporte%20Carmelio%20AI)")
 
 # =============================================================================
-# 6. CONSTANTES GLOBAIS
+# 6. CONSTANTES
 # =============================================================================
 DISCIPLINAS = [
     "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Civil",
     "Processo Penal", "Processo Civil", "Direito Tributário", "Direito do Trabalho",
-    "Notarial e Registral", "Ética Profissional", "Português", "RLM", "Informática",
-    "Direito Financeiro", "Criminologia", "Direitos Humanos"
+    "Notarial e Registral", "Ética Profissional", "Português", "RLM", "Informática"
 ]
 BANCAS = ["FGV", "Cebraspe", "Vunesp", "FCC", "AOCP", "Comperve", "IBFC", "Quadrix"]
 UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Federal"]
 
 # =============================================================================
-# 7. MÓDULOS PRINCIPAIS
+# 7. MÓDULOS
 # =============================================================================
 
 # --- MÓDULO 1: ESTUDANTE ---
@@ -332,76 +354,84 @@ if menu_opcao == "🎓 Área do Estudante":
                     st.markdown(r)
                     add_xp(20)
 
-    # 1.3 SALA DE FOCO (POMODORO)
+    # 1.3 SALA DE FOCO (VISUAL LIMPO E CENTRALIZADO)
     with tab_pomodoro:
-        st.markdown("### 🍅 Sala de Foco & Produtividade")
-        c_mode, c_config = st.columns([2, 1])
-        with c_mode:
-            st.write("#### Selecione o Ciclo")
-            modo_foco = st.radio("Nível:", 
-                ["Passos de bebê (10 min)", "Popular (20 min)", "Médio (40 min)", "Estendido (60 min)", "Personalizado"],
-                index=1, horizontal=True
-            )
-            if modo_foco == "Personalizado":
-                tempo_selecionado = st.slider("Minutos:", 5, 90, 25)
-            else:
-                tempo_selecionado = int(re.search(r'\d+', modo_foco).group())
+        st.markdown("### 🍅 Sala de Foco")
+        
+        # --- SELETORES DE MODO (NO TOPO) ---
+        c_mode1, c_mode2, c_mode3 = st.columns(3)
+        if c_mode1.button("🧠 Foco (25m)", use_container_width=True):
+            st.session_state.pomo_mode = "Foco"
+            st.session_state.pomo_time_left = 25 * 60
+            st.session_state.pomo_initial_time = 25 * 60
+            st.session_state.pomo_state = "STOPPED"
+            st.rerun()
+        if c_mode2.button("☕ Curto (5m)", use_container_width=True):
+            st.session_state.pomo_mode = "Descanso Curto"
+            st.session_state.pomo_time_left = 5 * 60
+            st.session_state.pomo_initial_time = 5 * 60
+            st.session_state.pomo_state = "STOPPED"
+            st.rerun()
+        if c_mode3.button("🧘 Longo (15m)", use_container_width=True):
+            st.session_state.pomo_mode = "Descanso Longo"
+            st.session_state.pomo_time_left = 15 * 60
+            st.session_state.pomo_initial_time = 15 * 60
+            st.session_state.pomo_state = "STOPPED"
+            st.rerun()
 
-        with c_config:
-            st.write("#### Configurações")
-            som = st.selectbox("Alarme:", ["Sound 1 (Ding)", "Mudo"])
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- CONTAINER PRINCIPAL DO TIMER ---
+        # Calculo do tempo
+        mins, secs = divmod(st.session_state.pomo_time_left, 60)
+        time_str = f"{mins:02d}:{secs:02d}"
+        
+        # HTML do Timer
+        st.markdown(f"""
+        <div class="timer-container">
+            <div class="timer-label">{st.session_state.pomo_mode}</div>
+            <div class="timer-display">{time_str}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Barra de Progresso
+        progresso = 1.0
+        if st.session_state.pomo_initial_time > 0:
+            progresso = st.session_state.pomo_time_left / st.session_state.pomo_initial_time
+        st.progress(progresso)
+
+        # --- BOTÕES DE AÇÃO ---
+        c_play, c_pause, c_reset = st.columns(3)
+        
+        if c_play.button("COMEÇAR", type="primary", use_container_width=True):
+            st.session_state.pomo_state = "RUNNING"
+            st.rerun()
             
-        with st.expander("🎵 Rádio Lofi (Música de Fundo)", expanded=False):
-            st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+        if c_pause.button("PAUSAR", use_container_width=True):
+            st.session_state.pomo_state = "PAUSED"
+            st.rerun()
+            
+        if c_reset.button("ZERAR", use_container_width=True):
+            st.session_state.pomo_state = "STOPPED"
+            st.session_state.pomo_time_left = st.session_state.pomo_initial_time
+            st.rerun()
+
+        # Lógica do Loop
+        if st.session_state.pomo_state == "RUNNING":
+            if st.session_state.pomo_time_left > 0:
+                time.sleep(1)
+                st.session_state.pomo_time_left -= 1
+                st.rerun()
+            else:
+                st.session_state.pomo_state = "STOPPED"
+                st.balloons()
+                add_xp(50)
+                st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
 
         st.markdown("---")
-        
-        col_timer_l, col_timer_c, col_timer_r = st.columns([1, 2, 1])
-        with col_timer_c:
-            if st.session_state.pomo_state == "STOPPED":
-                if st.session_state.pomo_initial_time != tempo_selecionado * 60:
-                    st.session_state.pomo_initial_time = tempo_selecionado * 60
-                    st.session_state.pomo_time_left = tempo_selecionado * 60
-            
-            mins, secs = divmod(st.session_state.pomo_time_left, 60)
-            time_str = f"{mins:02d}:{secs:02d}"
-            
-            st.markdown(f"""
-            <div class='timer-display'>{time_str}</div>
-            <div class='timer-label'>{st.session_state.pomo_mode} • {st.session_state.pomo_state}</div>
-            """, unsafe_allow_html=True)
-            
-            progresso = 1.0
-            if st.session_state.pomo_initial_time > 0:
-                progresso = st.session_state.pomo_time_left / st.session_state.pomo_initial_time
-            st.progress(progresso)
-
-            c_play, c_pause, c_reset = st.columns(3)
-            
-            if c_play.button("▶️ INICIAR", use_container_width=True, type="primary"):
-                st.session_state.pomo_state = "RUNNING"
-                st.rerun()
-                
-            if c_pause.button("⏸️ PAUSAR", use_container_width=True):
-                st.session_state.pomo_state = "PAUSED"
-                st.rerun()
-                
-            if c_reset.button("🔄 ZERAR", use_container_width=True):
-                st.session_state.pomo_state = "STOPPED"
-                st.session_state.pomo_time_left = st.session_state.pomo_initial_time
-                st.rerun()
-
-            if st.session_state.pomo_state == "RUNNING":
-                if st.session_state.pomo_time_left > 0:
-                    time.sleep(1)
-                    st.session_state.pomo_time_left -= 1
-                    st.rerun()
-                else:
-                    st.session_state.pomo_state = "STOPPED"
-                    st.balloons()
-                    add_xp(50)
-                    if som != "Mudo":
-                        st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+        # Rádio Lofi (Discreta)
+        with st.expander("🎵 Música de Fundo (Lofi Radio)", expanded=False):
+            st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
 
     # 1.4 FLASHCARDS
     with tab_flash:
