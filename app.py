@@ -50,7 +50,7 @@ st.markdown("""
     .flashcard { background: linear-gradient(135deg, #1F2430 0%, #282C34 100%); padding: 24px; border-radius: 12px; border: 1px solid #3B82F6; text-align: center; }
     .xp-badge { background-color: #FFD700; color: #000; padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 12px; }
     
-    /* POMODORO TIMER ESPECÍFICO */
+    /* POMODORO TIMER */
     .timer-display {
         font-size: 90px; font-weight: bold; color: #FFFFFF; text-align: center;
         text-shadow: 0 0 30px rgba(59, 130, 246, 0.6); margin: 20px 0; font-family: 'Courier New', monospace;
@@ -85,8 +85,6 @@ if "user_level" not in st.session_state: st.session_state.user_level = 1
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
 if "edital_topics" not in st.session_state: st.session_state.edital_topics = []
 if "generated_questions" not in st.session_state: st.session_state.generated_questions = []
-if "focus_sessions" not in st.session_state: st.session_state.focus_sessions = []
-if "cards" not in st.session_state: st.session_state.cards = []
 if "logs" not in st.session_state: st.session_state.logs = []
 if "lgpd_ack" not in st.session_state: st.session_state.lgpd_ack = False
 if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call = 0.0
@@ -161,7 +159,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     if erro: return f"Erro de Configuração: {erro}"
     start = time.time()
     try:
-        # Roteamento
         if task_type == "vision":
             model = "llama-3.2-11b-vision-preview"
         elif task_type == "audio":
@@ -169,7 +166,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
         else:
             model = model_override if model_override else "llama-3.3-70b-versatile"
 
-        # Vision
         if task_type == "vision" and file_bytes:
             b64 = base64.b64encode(file_bytes).decode('utf-8')
             content = client.chat.completions.create(
@@ -179,7 +175,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("vision", model, int((time.time()-start)*1000), len(prompt), "ok")
             return content
 
-        # Audio
         elif task_type == "audio" and file_bytes:
             import tempfile
             suffix = ".mp3"
@@ -194,7 +189,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("audio", model, int((time.time()-start)*1000), len(file_bytes), "ok")
             return transcription
 
-        # Text
         else:
             content = client.chat.completions.create(
                 messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
@@ -207,9 +201,6 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
         add_log(task_type, model_override or "auto", int((time.time()-start)*1000), 0, f"error: {e}")
         return f"❌ Erro na IA: {str(e)}"
 
-# =============================================================================
-# 4. VALIDAÇÃO & UTILITÁRIOS
-# =============================================================================
 def validate_json_response(response_text):
     try:
         match = re.search(r"\{.*\}", response_text, re.DOTALL)
@@ -261,7 +252,7 @@ with st.sidebar:
 
     st.markdown("---")
     menu_opcao = st.radio("Menu Principal:",
-        ["🎓 Área do Estudante", "💬 Mentor Jurídico", "📄 Redação de Contratos", "🏢 Cartório Digital (OCR)", "🎙️ Transcrição", "🍅 Sala de Foco (Pomodoro)", "⭐ Feedback", "📊 Logs", "👤 Sobre"],
+        ["🎓 Área do Estudante", "💬 Mentor Jurídico", "📄 Redação de Contratos", "🏢 Cartório Digital (OCR)", "🎙️ Transcrição", "⭐ Feedback", "📊 Logs", "👤 Sobre"],
         label_visibility="collapsed"
     )
 
@@ -291,7 +282,7 @@ UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "
 # --- MÓDULO 1: ESTUDANTE ---
 if menu_opcao == "🎓 Área do Estudante":
     st.title("🎓 Área do Estudante Pro")
-    tab_questoes, tab_edital, tab_flash, tab_crono = st.tabs(["📝 Banco Infinito", "🎯 Mestre dos Editais", "⚡ Flashcards", "📅 Cronograma"])
+    tab_questoes, tab_edital, tab_pomodoro, tab_flash, tab_crono = st.tabs(["📝 Banco Infinito", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "⚡ Flashcards", "📅 Cronograma"])
 
     # 1.1 QUESTÕES
     with tab_questoes:
@@ -374,7 +365,54 @@ if menu_opcao == "🎓 Área do Estudante":
             else:
                 st.warning("Texto inválido ou curto.")
 
-    # 1.3 FLASHCARDS
+    # 1.3 SALA DE FOCO (POMODORO COM RÁDIO LOFI)
+    with tab_pomodoro:
+        st.markdown("### 🍅 Sala de Foco & Produtividade")
+        c_mode, c_config = st.columns([2, 1])
+        with c_mode:
+            st.write("#### Selecione o Ciclo")
+            modo_foco = st.radio("Nível:", 
+                ["Passos de bebê (10 min)", "Popular (20 min)", "Médio (40 min)", "Estendido (60 min)", "Personalizado"],
+                index=1, horizontal=True
+            )
+            if modo_foco == "Personalizado":
+                tempo_selecionado = st.slider("Minutos:", 5, 90, 25)
+            else:
+                tempo_selecionado = int(re.search(r'\d+', modo_foco).group())
+
+        with c_config:
+            st.write("#### Configurações")
+            som = st.selectbox("Alarme:", ["Sound 1 (Ding)", "Mudo"])
+            
+        # NOVA FUNCIONALIDADE: RÁDIO LOFI
+        with st.expander("🎵 Rádio Lofi (Música de Fundo para Estudar)", expanded=False):
+            st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+            
+        st.markdown("---")
+        col_timer_l, col_timer_c, col_timer_r = st.columns([1, 2, 1])
+        with col_timer_c:
+            if st.button("▶️ COMEÇAR SESSÃO", use_container_width=True):
+                progresso = st.progress(0)
+                timer_text = st.empty()
+                status_text = st.empty()
+                
+                total_seg = tempo_selecionado * 60
+                for i in range(total_seg):
+                    restante = total_seg - i
+                    mins, secs = divmod(restante, 60)
+                    timer_text.markdown(f"<div class='timer-display'>{mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+                    status_text.markdown(f"<div class='timer-status'>FOCADO • {modo_foco}</div>", unsafe_allow_html=True)
+                    progresso.progress((i + 1) / total_seg)
+                    time.sleep(1) # Bloqueante intencional para foco
+                
+                timer_text.markdown(f"<div class='timer-display'>00:00</div>", unsafe_allow_html=True)
+                st.balloons()
+                st.success("Ciclo concluído!")
+                add_xp(tempo_selecionado * 2)
+                if som != "Mudo":
+                    st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+
+    # 1.4 FLASHCARDS
     with tab_flash:
         st.markdown("### ⚡ Flashcards")
         tema = st.text_input("Tema para memorizar")
@@ -394,7 +432,7 @@ if menu_opcao == "🎓 Área do Estudante":
             csv = "front,back\n" + "\n".join([f"{c['front']},{c['back']}" for c in st.session_state.cards])
             st.download_button("💾 Baixar Anki CSV", csv, "anki.csv")
 
-    # 1.4 CRONOGRAMA
+    # 1.5 CRONOGRAMA
     with tab_crono:
         st.markdown("### 📅 Cronograma")
         h = st.slider("Horas/dia", 1, 8, 4)
@@ -410,76 +448,6 @@ if menu_opcao == "🎓 Área do Estudante":
             st.text_area("Resultado", res, height=300)
             if criar_docx(res): st.download_button("💾 Baixar Plano", criar_docx(res), "Plano.docx")
             add_xp(15)
-
-# --- MÓDULO POMODORO (SALA DE FOCO) ---
-elif menu_opcao == "🍅 Sala de Foco (Pomodoro)":
-    st.title("🍅 Sala de Foco & Produtividade")
-
-    # Opções exatas das suas imagens
-    modo_foco = st.radio("Selecione o ciclo:", [
-        "Passos de bebê (10 min)", "Popular (20 min)", "Médio (40 min)", "Estendido (60 min)", "Personalizado"
-    ], index=2, horizontal=True)
-
-    if modo_foco == "Personalizado":
-        tempo_selecionado = st.slider("Minutos:", 5, 120, 25)
-    else:
-        # Extrai número do texto (ex: "Médio (40 min)" -> 40)
-        tempo_selecionado = int(re.search(r'\d+', modo_foco).group())
-
-    col1, col2 = st.columns(2)
-    with col1:
-        som = st.selectbox("Alarme:", ["Ding", "Bip", "Mudo"])
-    with col2:
-        notificacao = st.toggle("Notificar ao terminar", value=True)
-
-    st.markdown("---")
-
-    col_timer = st.columns([1, 2, 1])[1]
-    with col_timer:
-        if st.button("▶️ INICIAR SESSÃO", use_container_width=True):
-            status_text = st.empty()
-            timer_text = st.empty()
-            progresso = st.progress(0)
-
-            total_segundos = tempo_selecionado * 60
-            inicio = datetime.now()
-
-            for i in range(total_segundos):
-                restante = total_segundos - i
-                mins, secs = divmod(restante, 60)
-                time_str = f"{mins:02d}:{secs:02d}"
-
-                timer_text.markdown(f"<div class='timer-display'>{time_str}</div>", unsafe_allow_html=True)
-                status_text.markdown(f"<div class='timer-status'>FOCADO • {modo_foco}</div>", unsafe_allow_html=True)
-                progresso.progress((i + 1) / total_segundos)
-                time.sleep(1)
-
-            # Fim
-            timer_text.markdown(f"<div class='timer-display'>00:00</div>", unsafe_allow_html=True)
-            st.balloons()
-            st.success(f"🎉 Ciclo de {tempo_selecionado} min concluído!")
-            
-            # Registrar
-            fim = datetime.now()
-            st.session_state.focus_sessions.append({
-                "modo": modo_foco, "inicio": inicio.strftime("%H:%M"), 
-                "fim": fim.strftime("%H:%M"), "duracao": tempo_selecionado
-            })
-            add_xp(tempo_selecionado * 2)
-
-            if som != "Mudo":
-                st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
-            
-            if notificacao:
-                st.toast("⏰ Seu ciclo de foco terminou!", icon="⌛")
-
-    st.markdown("---")
-    st.markdown("### 📊 Histórico de sessões")
-    if st.session_state.focus_sessions:
-        for s in st.session_state.focus_sessions[-10:]:
-            st.write(f"- **{s['modo']}**: {s['inicio']} às {s['fim']} ({s['duracao']} min)")
-    else:
-        st.info("Nenhuma sessão registrada ainda.")
 
 # --- MENTOR ---
 elif menu_opcao == "💬 Mentor Jurídico":
@@ -532,7 +500,6 @@ elif menu_opcao == "🏢 Cartório Digital (OCR)":
     if u and st.button("Transcrever Inteiro Teor"):
         with st.spinner("Lendo..."):
             file_bytes = u.getvalue()
-            # Otimização com PIL se possível
             if PIL_AVAILABLE and u.type in ["image/jpeg", "image/png"]:
                 try:
                     img = Image.open(BytesIO(file_bytes)).convert("L")
@@ -592,5 +559,5 @@ elif menu_opcao == "📊 Logs":
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v9.0 Master")
+    st.write("Carmélio AI - v9.1 Master")
     st.write("Desenvolvido por Arthur Carmélio.")
