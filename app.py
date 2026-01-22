@@ -10,7 +10,7 @@ import re
 import os
 
 # =============================================================================
-# 1. CONFIGURAÇÃO E DESIGN (GEMINI STYLE)
+# 1. CONFIGURAÇÃO E DESIGN
 # =============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Suíte Jurídica",
@@ -18,12 +18,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Tentativa de importação segura
+# Importações seguras
 try: import pdfplumber
 except ImportError: pdfplumber = None
 try: import docx as docx_reader
 except ImportError: docx_reader = None
-try: from PIL import Image, ImageFilter, ImageOps
+try: from PIL import Image
 except ImportError: Image = None
 
 st.markdown("""
@@ -32,67 +32,61 @@ st.markdown("""
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
     
-    /* GEMINI GRADIENT TEXT */
+    /* TEXTO GEMINI */
     .gemini-text {
         background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        font-size: 2.2rem;
-        margin-bottom: 10px;
+        font-weight: 800; font-size: 2.2rem; margin-bottom: 10px;
     }
     
-    /* CHAT INPUT */
-    .stChatInput { border-radius: 20px; border: 1px solid #374151; }
-    
-    /* CARDS */
-    .question-card { 
-        background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
-        padding: 20px; border-radius: 15px; 
-        border: 1px solid #374151; margin-bottom: 10px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    /* POMODORO TIMER */
+    /* POMODORO */
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
     .timer-display {
         font-family: 'Roboto Mono', monospace; font-size: 100px; font-weight: 700;
         color: #FFFFFF; text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
     }
+    .timer-container {
+        background-color: #1F2430; border-radius: 20px; padding: 30px;
+        text-align: center; border: 1px solid #2B2F3B; margin: 20px auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 600px;
+    }
 
-    /* PERFIL LATERAL */
+    /* RODAPÉ E CRÉDITOS */
     .footer-credits {
-        text-align: center;
-        margin-top: 30px;
-        padding-top: 20px;
-        border-top: 1px solid #2B2F3B;
-        color: #6B7280;
-        font-size: 12px;
+        text-align: center; margin-top: 40px; padding-top: 20px;
+        border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 12px;
     }
     .footer-name {
-        color: #E5E7EB;
-        font-weight: 700;
-        font-size: 14px;
-        display: block;
-        margin-top: 5px;
+        color: #E5E7EB; font-weight: 700; font-size: 14px; display: block; margin-top: 5px;
     }
     
-    /* BOTÕES */
+    /* BOTÕES E INPUTS */
     .stButton>button { border-radius: 12px; font-weight: 600; border: none; }
+    .stChatInput { border-radius: 20px; border: 1px solid #374151; }
+    .question-card { 
+        background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
+        padding: 20px; border-radius: 15px; border: 1px solid #374151; margin-bottom: 10px; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
 # 2. GESTÃO DE ESTADO
 # =============================================================================
+# Inicializa variáveis se não existirem
 DEFAULTS = {
     "edital_text": "", 
     "chat_history": [], 
     "generated_questions": [], 
-    "lgpd_ack": False, "last_heavy_call": 0.0,
+    "lgpd_ack": False, 
+    "last_heavy_call": 0.0,
     # Pomodoro
-    "pomo_state": "STOPPED", "pomo_mode": "Foco", 
-    "pomo_duration": 25 * 60, "pomo_end_time": None, "pomo_auto_start": False
+    "pomo_state": "STOPPED", 
+    "pomo_mode": "Foco", 
+    "pomo_duration": 25 * 60, 
+    "pomo_end_time": None, 
+    "pomo_auto_start": False
 }
 
 for key, value in DEFAULTS.items():
@@ -122,7 +116,7 @@ def extract_json_safe(text):
     return None
 
 # =============================================================================
-# 3. MOTOR DE IA (GROQ)
+# 3. MOTOR DE IA
 # =============================================================================
 def get_client():
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -130,12 +124,11 @@ def get_client():
     return Groq(api_key=api_key)
 
 def stream_text(text):
-    """Efeito de digitação suave"""
     for word in text.split(" "):
         yield word + " "
         time.sleep(0.02)
 
-def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, um assistente jurídico de elite.", temp=0.5):
+def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, assistente jurídico.", temp=0.5):
     if check_rate_limit(): return None
     client = get_client()
     if not client: return "⚠️ Configure a GROQ_API_KEY."
@@ -143,16 +136,13 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
     mark_call()
     try:
         if type == "text":
-            # Se for string única, converte para formato de mensagem
             if isinstance(messages_or_prompt, str):
                 msgs = [{"role":"system","content":system}, {"role":"user","content":messages_or_prompt}]
             else:
-                # Se já for lista de histórico, adiciona o system prompt no início
                 msgs = [{"role":"system","content":system}] + messages_or_prompt
 
             r = client.chat.completions.create(
-                messages=msgs,
-                model="llama-3.3-70b-versatile", temperature=temp
+                messages=msgs, model="llama-3.3-70b-versatile", temperature=temp
             )
             return r.choices[0].message.content
             
@@ -180,18 +170,18 @@ def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o
         return f"Erro na IA: {e}"
 
 # =============================================================================
-# 4. SIDEBAR (NAVEGAÇÃO)
+# 4. SIDEBAR
 # =============================================================================
 with st.sidebar:
-    # 1. LOGO (Prioridade Máxima)
+    # 1. LOGO
     if os.path.exists("logo.jpg.png"):
         st.image("logo.jpg.png", use_container_width=True)
     else:
-        st.warning("⚠️ Logo não encontrada (logo.jpg.png)")
+        st.warning("⚠️ logo.jpg.png não encontrada")
     
     st.markdown("---")
     
-    # 2. MENU PRINCIPAL
+    # 2. MENU
     menu = st.radio("Menu Principal:", 
         ["✨ Chat Inteligente", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "📄 Redação Jurídica", "🏢 Cartório OCR", "🎙️ Transcrição"],
         label_visibility="collapsed"
@@ -199,12 +189,12 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 3. REDES SOCIAIS
+    # 3. LINKS
     c_link, c_zap = st.columns(2)
     with c_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
     with c_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
 
-    # 4. CRÉDITOS (NO FINAL)
+    # 4. CRÉDITOS (Abaixo de tudo)
     st.markdown("""
     <div class="footer-credits">
         Desenvolvido por <br>
@@ -225,61 +215,50 @@ if not st.session_state.lgpd_ack:
 # 5. MÓDULOS
 # =============================================================================
 
-# --- 1. CHAT INTELIGENTE (O CÉREBRO DA OPERAÇÃO) ---
+# --- 1. CHAT INTELIGENTE (HOME) ---
 if menu == "✨ Chat Inteligente":
-    st.markdown('<h1 class="gemini-text">Como posso ajudar hoje?</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="gemini-text">Olá, Doutor(a).</h1>', unsafe_allow_html=True)
     
-    # Se o chat estiver vazio, mostre sugestões
     if not st.session_state.chat_history:
-        st.caption("Sou sua Inteligência Artificial Jurídica. Pergunte-me qualquer coisa.")
-        c1, c2, c3 = st.columns(3)
-        if c1.button("📚 Explicar um conceito jurídico"):
-            st.session_state.chat_history.append({"role": "user", "content": "Pode me explicar a diferença entre Prescrição e Decadência de forma didática?"})
+        st.caption("Sou o Carmélio AI. Posso ajudar com dúvidas, peças, estudos ou jurisprudência.")
+        c1, c2 = st.columns(2)
+        if c1.button("📚 Explicar Conceito"):
+            st.session_state.chat_history.append({"role": "user", "content": "Explique a diferença entre Prescrição e Decadência."})
             st.rerun()
-        if c2.button("💡 Ideias para TCC/Tese"):
-            st.session_state.chat_history.append({"role": "user", "content": "Me dê 3 ideias inovadoras de temas para TCC em Direito Digital."})
-            st.rerun()
-        if c3.button("⚖️ Consultar Jurisprudência"):
-            st.session_state.chat_history.append({"role": "user", "content": "Qual o entendimento atual do STJ sobre a Taxatividade do Rol da ANS?"})
+        if c2.button("💡 Ideias de Tese"):
+            st.session_state.chat_history.append({"role": "user", "content": "Sugira teses de defesa para crime de furto famélico."})
             st.rerun()
 
-    # Exibição do Histórico
+    # Histórico
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Área de Input
+    # Input
     if prompt := st.chat_input("Digite sua mensagem..."):
-        # Adiciona usuário ao histórico
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.write(prompt)
         
-        # Resposta da IA com Streaming
         with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                # Envia histórico recente para manter contexto (últimas 6 mensagens)
+            with st.spinner("Analisando..."):
                 context_msgs = st.session_state.chat_history[-6:]
-                res = call_ai(context_msgs, system="Seja um mentor jurídico didático e preciso.")
-                
-                # Streaming effect
+                res = call_ai(context_msgs, system="Seja um mentor jurídico preciso.")
                 st.write_stream(stream_text(res))
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
 
-    # Botão de Limpeza
     if st.session_state.chat_history:
-        if st.button("🗑️ Nova Conversa", help="Limpar histórico"):
+        if st.button("🗑️ Limpar Conversa"):
             st.session_state.chat_history = []
             st.rerun()
 
 # --- 2. MESTRE DOS EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
-    st.caption("Carregue seu edital para gerar questões personalizadas.")
-
-    with st.expander("📂 Upload do Edital", expanded=not bool(st.session_state.edital_text)):
+    
+    with st.expander("📂 Upload do Edital (Contexto)", expanded=not bool(st.session_state.edital_text)):
         file = st.file_uploader("Arraste seu PDF/DOCX", type=["pdf", "docx"])
         if file:
-            with st.spinner("Analisando..."):
+            with st.spinner("Lendo edital..."):
                 raw = "Conteúdo..."
                 if file.type == "application/pdf" and pdfplumber:
                     with pdfplumber.open(BytesIO(file.getvalue())) as pdf: raw = "".join([p.extract_text() or "" for p in pdf.pages])
@@ -287,19 +266,18 @@ elif menu == "🎯 Mestre dos Editais":
                     doc = docx_reader.Document(BytesIO(file.getvalue()))
                     raw = "\n".join([p.text for p in doc.paragraphs])
                 st.session_state.edital_text = raw
-                st.success("Edital carregado com sucesso!")
+                st.success("Edital carregado! A IA usará este contexto.")
                 st.rerun()
 
     st.markdown("---")
     
-    # Gerador de Questões
     c1, c2, c3 = st.columns(3)
     banca = c1.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
     disc = c2.selectbox("Disciplina", ["Constitucional", "Administrativo", "Penal", "Civil"])
     assunto = c3.text_input("Assunto", "Atos Administrativos")
 
-    if st.button("🚀 Gerar Questão", type="primary", use_container_width=True):
-        with st.spinner("Criando questão inédita..."):
+    if st.button("🚀 Gerar Questão Inédita", type="primary", use_container_width=True):
+        with st.spinner("Criando..."):
             ctx = st.session_state.edital_text[:3000] if st.session_state.edital_text else ""
             p = f"Crie uma questão inédita (JSON). Banca: {banca}. Disciplina: {disc}. Assunto: {assunto}. Contexto Edital: {ctx}. Formato: <json>{{'enunciado':'...', 'alternativas':{{'A':'...','B':'...'}}, 'gabarito':'A', 'comentario':'...'}}</json>"
             res = call_ai(p, temp=0.5)
@@ -339,7 +317,6 @@ elif menu == "🍅 Sala de Foco":
         if now >= st.session_state.pomo_end_time:
             st.session_state.pomo_state = "STOPPED"
             st.balloons()
-            st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
             
             if st.session_state.pomo_auto_start:
                 next_mode = "Descanso" if st.session_state.pomo_mode == "Foco" else "Foco"
@@ -382,4 +359,43 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    st.session_state.pomo_auto_start =
+    # Correção do erro de sintaxe: usando a chave do widget
+    st.checkbox("🔄 Ciclos automáticos", value=st.session_state.pomo_auto_start, key="pomo_auto_start")
+    
+    with st.expander("🎵 Rádio Lofi", expanded=False):
+        st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+
+# --- 4. REDAÇÃO ---
+elif menu == "📄 Redação Jurídica":
+    st.title("📄 Redação Jurídica")
+    st.info("Descreva o caso e a IA redige a peça para você.")
+    
+    c1, c2 = st.columns([1, 2])
+    tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
+    det = c2.text_area("Fatos e Detalhes", height=100)
+    
+    if st.button("✍️ Gerar Minuta"):
+        with st.spinner("Escrevendo..."):
+            res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
+            st.text_area("Minuta:", res, height=500)
+
+# --- 5. OCR ---
+elif menu == "🏢 Cartório OCR":
+    st.title("🏢 Leitor de Documentos")
+    st.info("Extraia texto de imagens e PDFs.")
+    u = st.file_uploader("Arquivo", type=["jpg","png","pdf"])
+    if u and st.button("Extrair"):
+        with st.spinner("Processando..."):
+            res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
+            st.text_area("Texto:", res, height=400)
+
+# --- 6. TRANSCRIÇÃO ---
+elif menu == "🎙️ Transcrição":
+    st.title("🎙️ Transcrição")
+    st.info("Grave áudios e converta em texto.")
+    a = st.audio_input("Gravar")
+    if a:
+        with st.spinner("Transcrevendo..."):
+            res = call_ai("", file_bytes=a.getvalue(), type="audio")
+            st.success("Texto:")
+            st.write(res)
