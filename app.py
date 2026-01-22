@@ -7,6 +7,7 @@ import json
 import base64
 import time
 import re
+import os
 
 # =============================================================================
 # 1. CONFIGURAÇÃO E DESIGN (GEMINI STYLE)
@@ -37,11 +38,14 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800;
-        font-size: 2.5rem;
+        font-size: 2.2rem;
+        margin-bottom: 10px;
     }
     
+    /* CHAT INPUT */
+    .stChatInput { border-radius: 20px; border: 1px solid #374151; }
+    
     /* CARDS */
-    .stChatInput { border-radius: 20px; }
     .question-card { 
         background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
         padding: 20px; border-radius: 15px; 
@@ -57,11 +61,23 @@ st.markdown("""
     }
 
     /* PERFIL LATERAL */
-    .profile-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
-    .profile-dev { font-size: 12px; color: #9CA3AF; margin-bottom: 2px; }
-    .profile-name { font-weight: 700; font-size: 20px; color: #FFFFFF; }
+    .footer-credits {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #2B2F3B;
+        color: #6B7280;
+        font-size: 12px;
+    }
+    .footer-name {
+        color: #E5E7EB;
+        font-weight: 700;
+        font-size: 14px;
+        display: block;
+        margin-top: 5px;
+    }
     
-    /* BOTÃO SPARKLE */
+    /* BOTÕES */
     .stButton>button { border-radius: 12px; font-weight: 600; border: none; }
 </style>
 """, unsafe_allow_html=True)
@@ -70,9 +86,8 @@ st.markdown("""
 # 2. GESTÃO DE ESTADO
 # =============================================================================
 DEFAULTS = {
-    "user_xp": 0, "user_level": 1,
     "edital_text": "", 
-    "chat_history": [], # Histórico do Modo Estudo
+    "chat_history": [], 
     "generated_questions": [], 
     "lgpd_ack": False, "last_heavy_call": 0.0,
     # Pomodoro
@@ -115,12 +130,12 @@ def get_client():
     return Groq(api_key=api_key)
 
 def stream_text(text):
-    """Simula digitação (efeito Gemini)"""
+    """Efeito de digitação suave"""
     for word in text.split(" "):
         yield word + " "
         time.sleep(0.02)
 
-def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente útil.", temp=0.3):
+def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, um assistente jurídico de elite.", temp=0.5):
     if check_rate_limit(): return None
     client = get_client()
     if not client: return "⚠️ Configure a GROQ_API_KEY."
@@ -128,8 +143,15 @@ def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente
     mark_call()
     try:
         if type == "text":
+            # Se for string única, converte para formato de mensagem
+            if isinstance(messages_or_prompt, str):
+                msgs = [{"role":"system","content":system}, {"role":"user","content":messages_or_prompt}]
+            else:
+                # Se já for lista de histórico, adiciona o system prompt no início
+                msgs = [{"role":"system","content":system}] + messages_or_prompt
+
             r = client.chat.completions.create(
-                messages=[{"role":"system","content":system},{"role":"user","content":prompt}],
+                messages=msgs,
                 model="llama-3.3-70b-versatile", temperature=temp
             )
             return r.choices[0].message.content
@@ -137,7 +159,7 @@ def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente
         elif type == "vision" and file_bytes:
             b64 = base64.b64encode(file_bytes).decode('utf-8')
             r = client.chat.completions.create(
-                messages=[{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}],
+                messages=[{"role":"user","content":[{"type":"text","text":messages_or_prompt},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}],
                 model="llama-3.2-11b-vision-preview", temperature=0.1
             )
             return r.choices[0].message.content
@@ -158,28 +180,35 @@ def call_ai(prompt, file_bytes=None, type="text", system="Você é um assistente
         return f"Erro na IA: {e}"
 
 # =============================================================================
-# 4. SIDEBAR (CLEAN)
+# 4. SIDEBAR (NAVEGAÇÃO)
 # =============================================================================
 with st.sidebar:
-    try: st.image("logo.jpg.png", use_container_width=True)
-    except: pass
+    # 1. LOGO (Prioridade Máxima)
+    if os.path.exists("logo.jpg.png"):
+        st.image("logo.jpg.png", use_container_width=True)
+    else:
+        st.warning("⚠️ Logo não encontrada (logo.jpg.png)")
     
     st.markdown("---")
     
-    # Menu com Ícones
-    menu = st.radio("Menu:", 
-        ["✨ Estudo Gemini", "🍅 Sala de Foco", "📄 Redação", "🏢 Cartório OCR", "🎙️ Transcrição"],
+    # 2. MENU PRINCIPAL
+    menu = st.radio("Menu Principal:", 
+        ["✨ Chat Inteligente", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "📄 Redação Jurídica", "🏢 Cartório OCR", "🎙️ Transcrição"],
         label_visibility="collapsed"
     )
     
     st.markdown("---")
+    
+    # 3. REDES SOCIAIS
     c_link, c_zap = st.columns(2)
     with c_link: st.markdown("[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/arthurcarmelio/)")
     with c_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720)")
 
+    # 4. CRÉDITOS (NO FINAL)
     st.markdown("""
-    <div style="text-align: center; margin-top: 20px; color: #6B7280; font-size: 12px;">
-        Desenvolvido por <br><strong style="color: #E5E7EB;">Arthur Carmélio</strong>
+    <div class="footer-credits">
+        Desenvolvido por <br>
+        <span class="footer-name">Arthur Carmélio</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -193,89 +222,102 @@ if not st.session_state.lgpd_ack:
     st.stop()
 
 # =============================================================================
-# 5. MÓDULOS (GEMINI MODE)
+# 5. MÓDULOS
 # =============================================================================
 
-# --- MODO ESTUDO GEMINI (PRINCIPAL) ---
-if menu == "✨ Estudo Gemini":
-    # Header com Gradiente
-    st.markdown('<h1 class="gemini-text">Olá, Arthur</h1>', unsafe_allow_html=True)
-    st.caption("Sou sua Inteligência Artificial Jurídica. Suba um edital ou peça uma questão para começar.")
+# --- 1. CHAT INTELIGENTE (O CÉREBRO DA OPERAÇÃO) ---
+if menu == "✨ Chat Inteligente":
+    st.markdown('<h1 class="gemini-text">Como posso ajudar hoje?</h1>', unsafe_allow_html=True)
+    
+    # Se o chat estiver vazio, mostre sugestões
+    if not st.session_state.chat_history:
+        st.caption("Sou sua Inteligência Artificial Jurídica. Pergunte-me qualquer coisa.")
+        c1, c2, c3 = st.columns(3)
+        if c1.button("📚 Explicar um conceito jurídico"):
+            st.session_state.chat_history.append({"role": "user", "content": "Pode me explicar a diferença entre Prescrição e Decadência de forma didática?"})
+            st.rerun()
+        if c2.button("💡 Ideias para TCC/Tese"):
+            st.session_state.chat_history.append({"role": "user", "content": "Me dê 3 ideias inovadoras de temas para TCC em Direito Digital."})
+            st.rerun()
+        if c3.button("⚖️ Consultar Jurisprudência"):
+            st.session_state.chat_history.append({"role": "user", "content": "Qual o entendimento atual do STJ sobre a Taxatividade do Rol da ANS?"})
+            st.rerun()
 
-    # 1. Área de Contexto (Edital) - Discreto no topo
-    with st.expander("📂 Contexto do Estudo (Edital/PDF)", expanded=not bool(st.session_state.edital_text)):
-        file = st.file_uploader("Arraste seu documento aqui", type=["pdf", "docx"])
+    # Exibição do Histórico
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Área de Input
+    if prompt := st.chat_input("Digite sua mensagem..."):
+        # Adiciona usuário ao histórico
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.write(prompt)
+        
+        # Resposta da IA com Streaming
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                # Envia histórico recente para manter contexto (últimas 6 mensagens)
+                context_msgs = st.session_state.chat_history[-6:]
+                res = call_ai(context_msgs, system="Seja um mentor jurídico didático e preciso.")
+                
+                # Streaming effect
+                st.write_stream(stream_text(res))
+                st.session_state.chat_history.append({"role": "assistant", "content": res})
+
+    # Botão de Limpeza
+    if st.session_state.chat_history:
+        if st.button("🗑️ Nova Conversa", help="Limpar histórico"):
+            st.session_state.chat_history = []
+            st.rerun()
+
+# --- 2. MESTRE DOS EDITAIS ---
+elif menu == "🎯 Mestre dos Editais":
+    st.title("🎯 Mestre dos Editais")
+    st.caption("Carregue seu edital para gerar questões personalizadas.")
+
+    with st.expander("📂 Upload do Edital", expanded=not bool(st.session_state.edital_text)):
+        file = st.file_uploader("Arraste seu PDF/DOCX", type=["pdf", "docx"])
         if file:
-            with st.spinner("Analisando documento..."):
+            with st.spinner("Analisando..."):
                 raw = "Conteúdo..."
                 if file.type == "application/pdf" and pdfplumber:
                     with pdfplumber.open(BytesIO(file.getvalue())) as pdf: raw = "".join([p.extract_text() or "" for p in pdf.pages])
                 elif "word" in file.type and docx_reader:
                     doc = docx_reader.Document(BytesIO(file.getvalue()))
                     raw = "\n".join([p.text for p in doc.paragraphs])
-                
                 st.session_state.edital_text = raw
-                # Adiciona mensagem de sistema ao chat se for novo
-                st.session_state.chat_history.append({"role": "assistant", "content": f"✅ **Edital '{file.name}' processado!** Agora posso criar questões específicas sobre ele. O que deseja treinar?"})
+                st.success("Edital carregado com sucesso!")
                 st.rerun()
 
-    # 2. Histórico de Chat (Interface Principal)
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            # Se for JSON de questão, renderiza bonito
-            if isinstance(msg["content"], dict) and "enunciado" in msg["content"]:
-                q = msg["content"]
-                st.markdown(f"<div class='question-card'><strong>QUESTÃO INÉDITA</strong><br><br>{q['enunciado']}</div>", unsafe_allow_html=True)
-                for k,v in q["alternativas"].items():
-                    st.write(f"**{k})** {v}")
-                with st.expander("👁️ Ver Gabarito"):
-                    st.success(f"**{q['gabarito']}**")
-                    st.info(q['comentario'])
-            else:
-                st.markdown(msg["content"])
-
-    # 3. Controles de Geração (Abaixo do chat para facilitar)
     st.markdown("---")
-    c1, c2, c3 = st.columns([2, 1, 1])
     
-    # Input de Texto Livre
-    if prompt := st.chat_input("Ex: Me explique Dolo Eventual ou gere uma questão sobre isso..."):
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.write(prompt)
-        
-        with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                # Decide se é comando de questão ou chat normal
-                if "questão" in prompt.lower() or "exercício" in prompt.lower():
-                    ctx = st.session_state.edital_text[:3000] if st.session_state.edital_text else ""
-                    sys_p = f"Você é um examinador de banca. Contexto: {ctx}. Retorne JSON <json>...</json>."
-                    res = call_ai(prompt, system=sys_p, temp=0.5)
-                    data = extract_json_safe(res)
-                    if data:
-                        st.session_state.chat_history.append({"role": "assistant", "content": data})
-                        st.rerun()
-                    else:
-                        st.write(res)
-                        st.session_state.chat_history.append({"role": "assistant", "content": res})
-                else:
-                    res = call_ai(prompt, system="Seja um mentor jurídico didático.")
-                    st.write_stream(stream_text(res))
-                    st.session_state.chat_history.append({"role": "assistant", "content": res})
+    # Gerador de Questões
+    c1, c2, c3 = st.columns(3)
+    banca = c1.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
+    disc = c2.selectbox("Disciplina", ["Constitucional", "Administrativo", "Penal", "Civil"])
+    assunto = c3.text_input("Assunto", "Atos Administrativos")
 
-    # Botões Rápidos (Chips)
-    st.write("Sugestões:")
-    b1, b2, b3, b4 = st.columns(4)
-    if b1.button("🎲 Questão Aleatória"):
-        st.session_state.chat_history.append({"role": "user", "content": "Gere uma questão difícil aleatória de Direito."})
-        st.rerun()
-    if b2.button("🎯 Questão do Edital", disabled=not st.session_state.edital_text):
-        st.session_state.chat_history.append({"role": "user", "content": "Gere uma questão baseada no edital carregado."})
-        st.rerun()
-    if b3.button("🧹 Limpar Chat"):
-        st.session_state.chat_history = []
-        st.rerun()
+    if st.button("🚀 Gerar Questão", type="primary", use_container_width=True):
+        with st.spinner("Criando questão inédita..."):
+            ctx = st.session_state.edital_text[:3000] if st.session_state.edital_text else ""
+            p = f"Crie uma questão inédita (JSON). Banca: {banca}. Disciplina: {disc}. Assunto: {assunto}. Contexto Edital: {ctx}. Formato: <json>{{'enunciado':'...', 'alternativas':{{'A':'...','B':'...'}}, 'gabarito':'A', 'comentario':'...'}}</json>"
+            res = call_ai(p, temp=0.5)
+            data = extract_json_safe(res)
+            
+            if data:
+                st.session_state.generated_questions.append(data)
+    
+    if st.session_state.generated_questions:
+        q = st.session_state.generated_questions[-1]
+        st.markdown(f"<div class='question-card'><strong>{banca} | {disc}</strong><br><br>{q.get('enunciado')}</div>", unsafe_allow_html=True)
+        for k,v in q.get("alternativas", {}).items():
+            st.write(f"**{k})** {v}")
+        with st.expander("Ver Gabarito"):
+            st.success(f"Gabarito: {q.get('gabarito')}")
+            st.info(q.get("comentario"))
 
-# --- SALA DE FOCO ---
+# --- 3. SALA DE FOCO ---
 elif menu == "🍅 Sala de Foco":
     st.title("🍅 Foco & Produtividade")
     
@@ -340,41 +382,4 @@ elif menu == "🍅 Sala de Foco":
         st.session_state.pomo_duration = 25 * 60
         st.rerun()
 
-    st.session_state.pomo_auto_start = st.checkbox("🔄 Ciclos automáticos", value=st.session_state.pomo_auto_start)
-    with st.expander("🎵 Rádio Lofi", expanded=False):
-        st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
-
-# --- REDAÇÃO ---
-elif menu == "📄 Redação":
-    st.title("📄 Redação Jurídica")
-    st.info("Descreva o caso e a IA redige a peça para você.")
-    
-    c1, c2 = st.columns([1, 2])
-    tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
-    det = c2.text_area("Fatos e Detalhes", height=100)
-    
-    if st.button("✍️ Gerar Minuta"):
-        with st.spinner("Escrevendo..."):
-            res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
-            st.text_area("Minuta:", res, height=500)
-
-# --- OCR ---
-elif menu == "🏢 Cartório OCR":
-    st.title("🏢 Leitor de Documentos")
-    st.info("Extraia texto de imagens e PDFs.")
-    u = st.file_uploader("Arquivo", type=["jpg","png","pdf"])
-    if u and st.button("Extrair"):
-        with st.spinner("Processando..."):
-            res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
-            st.text_area("Texto:", res, height=400)
-
-# --- TRANSCRIÇÃO ---
-elif menu == "🎙️ Transcrição":
-    st.title("🎙️ Transcrição")
-    st.info("Grave áudios e converta em texto.")
-    a = st.audio_input("Gravar")
-    if a:
-        with st.spinner("Transcrevendo..."):
-            res = call_ai("", file_bytes=a.getvalue(), type="audio")
-            st.success("Texto:")
-            st.write(res)
+    st.session_state.pomo_auto_start =
