@@ -10,7 +10,7 @@ import re
 import os
 
 # =============================================================================
-# 0. DEPENDÊNCIAS OPCIONAIS
+# 0. DEPENDÊNCIAS OPCIONAIS (PARA EVITAR ERROS NO DEPLOY)
 # =============================================================================
 try:
     import pdfplumber
@@ -56,7 +56,7 @@ st.markdown("""
         text-shadow: 0 0 40px rgba(59, 130, 246, 0.4); margin: 10px 0; font-family: 'Courier New', monospace;
     }
     .timer-label {
-        font-size: 18px; color: #9CA3AF; text-align: center; text-transform: uppercase; letter-spacing: 2px;
+        font-size: 18px; color: #9CA3AF; text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;
     }
     
     /* INPUTS & BUTTONS */
@@ -73,12 +73,11 @@ st.markdown("""
     /* PERFIL */
     .profile-box { text-align: center; margin-bottom: 20px; color: #E0E7FF; }
     .profile-name { font-weight: bold; font-size: 18px; margin-top: 5px; color: #FFFFFF; }
-    .profile-role { font-size: 12px; color: #3B82F6; text-transform: uppercase; letter-spacing: 1px; }
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 2. ESTADO GLOBAL
+# 2. ESTADO GLOBAL (SESSION STATE)
 # =============================================================================
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "user_level" not in st.session_state: st.session_state.user_level = 1
@@ -91,10 +90,10 @@ if "logs" not in st.session_state: st.session_state.logs = []
 if "lgpd_ack" not in st.session_state: st.session_state.lgpd_ack = False
 if "last_heavy_call" not in st.session_state: st.session_state.last_heavy_call = 0.0
 
-# --- ESTADO DO POMODORO ---
+# Estado Pomodoro
 if "pomo_state" not in st.session_state: st.session_state.pomo_state = "STOPPED" # STOPPED, RUNNING
 if "pomo_time_left" not in st.session_state: st.session_state.pomo_time_left = 25 * 60
-if "pomo_mode" not in st.session_state: st.session_state.pomo_mode = "Foco" # Foco, Curto, Longo
+if "pomo_mode" not in st.session_state: st.session_state.pomo_mode = "Foco" 
 if "pomo_initial_time" not in st.session_state: st.session_state.pomo_initial_time = 25 * 60
 
 RATE_LIMIT_SECONDS = 15
@@ -123,11 +122,15 @@ def add_log(task_type, model, latency_ms, token_usage, status):
         "token_usage": token_usage, "status": status, "timestamp": datetime.now().isoformat()
     })
 
-# LGPD
+# LGPD Modal
 if not st.session_state.lgpd_ack:
-    with st.expander("🔐 LGPD e Termos de Uso", expanded=True):
-        st.markdown("Seus dados são processados pela Groq API e não são retidos. Concorda?")
-        if st.button("Concordo"):
+    with st.expander("🔐 LGPD e Termos de Uso (Obrigatório)", expanded=True):
+        st.markdown("""
+        **Bem-vindo ao Carmélio AI**
+        - Seus dados (textos, imagens, áudios) são processados via API Groq e não são armazenados permanentemente.
+        - Ao continuar, você concorda com o uso da ferramenta para fins educacionais e profissionais.
+        """)
+        if st.button("Concordo e Entrar"):
             st.session_state.lgpd_ack = True
             st.rerun()
     st.stop()
@@ -157,6 +160,7 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
     if erro: return f"Erro de Configuração: {erro}"
     start = time.time()
     try:
+        # Roteamento Inteligente
         if task_type == "vision":
             model = "llama-3.2-11b-vision-preview"
         elif task_type == "audio":
@@ -164,6 +168,7 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
         else:
             model = model_override if model_override else "llama-3.3-70b-versatile"
 
+        # Vision
         if task_type == "vision" and file_bytes:
             b64 = base64.b64encode(file_bytes).decode('utf-8')
             content = client.chat.completions.create(
@@ -173,6 +178,7 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("vision", model, int((time.time()-start)*1000), len(prompt), "ok")
             return content
 
+        # Audio
         elif task_type == "audio" and file_bytes:
             import tempfile
             suffix = ".mp3"
@@ -187,6 +193,7 @@ def processar_ia(prompt, file_bytes=None, task_type="text", system_instruction="
             add_log("audio", model, int((time.time()-start)*1000), len(file_bytes), "ok")
             return transcription
 
+        # Text
         else:
             content = client.chat.completions.create(
                 messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}],
@@ -220,16 +227,19 @@ def extract_json_from_text(text):
     except Exception: return None
 
 # =============================================================================
-# 5. SIDEBAR
+# 5. SIDEBAR (PERFIL LIMPO)
 # =============================================================================
 with st.sidebar:
-    try: st.image("logo.jpg.png", use_container_width=True)
-    except: st.warning("Logo não encontrada.")
+    try:
+        st.image("logo.jpg.png", use_container_width=True)
+    except:
+        st.warning("⚠️ Logo não encontrada.")
+    
+    # --- PERFIL LIMPO (SEM CARGO) ---
     st.markdown("""
     <div class="profile-box">
         <small>Desenvolvido por</small><br>
         <div class="profile-name">Arthur Carmélio</div>
-        <div class="profile-role">ESPECIALISTA NOTARIAL</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -245,7 +255,7 @@ with st.sidebar:
     )
 
     with st.expander("🍅 Pomodoro Rápido"):
-        if st.button("Foco 25min"): st.toast("Foco iniciado!")
+        if st.button("Foco 25min"): st.toast("Use a aba Sala de Foco para mais opções!")
 
     st.markdown("---")
     col_link, col_zap = st.columns(2)
@@ -253,179 +263,187 @@ with st.sidebar:
     with col_zap: st.markdown("[![WhatsApp](https://img.shields.io/badge/Suporte-Zap-green?logo=whatsapp)](https://wa.me/5548920039720?text=Suporte%20Carmelio%20AI)")
 
 # =============================================================================
-# 7. MÓDULOS
+# 6. CONSTANTES GLOBAIS
+# =============================================================================
+DISCIPLINAS = [
+    "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Civil",
+    "Processo Penal", "Processo Civil", "Direito Tributário", "Direito do Trabalho",
+    "Notarial e Registral", "Ética Profissional", "Português", "RLM", "Informática",
+    "Direito Financeiro", "Criminologia", "Direitos Humanos"
+]
+BANCAS = ["FGV", "Cebraspe", "Vunesp", "FCC", "AOCP", "Comperve", "IBFC", "Quadrix"]
+UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "Federal"]
+
+# =============================================================================
+# 7. MÓDULOS PRINCIPAIS
 # =============================================================================
 
-# --- ESTUDANTE PRO ---
+# --- MÓDULO 1: ESTUDANTE ---
 if menu_opcao == "🎓 Área do Estudante":
     st.title("🎓 Área do Estudante Pro")
     tab_questoes, tab_edital, tab_pomodoro, tab_flash, tab_crono = st.tabs(["📝 Banco Infinito", "🎯 Mestre dos Editais", "🍅 Sala de Foco", "⚡ Flashcards", "📅 Cronograma"])
 
     # 1.1 QUESTÕES
     with tab_questoes:
-        st.markdown("### 🔎 Gerador de Questões")
+        st.markdown("### 🔎 Gerador de Questões Inéditas")
         c1, c2, c3, c4 = st.columns(4)
-        disc = c1.selectbox("Disciplina", ["Direito Constitucional", "Administrativo", "Penal", "Civil", "Proc. Penal", "Notarial", "Português", "Informática"])
-        banca = c2.selectbox("Banca", ["FGV", "Cebraspe", "Vunesp", "FCC"])
-        uf = c3.selectbox("UF", ["SC", "SP", "RJ", "DF", "Federal"])
+        disc = c1.selectbox("Disciplina", DISCIPLINAS)
+        banca = c2.selectbox("Banca", BANCAS)
+        uf = c3.selectbox("UF/Tribunal", UFS)
         nivel = c4.selectbox("Nível", ["Fácil", "Médio", "Difícil"])
         assunto = st.text_input("Assunto", placeholder="Ex: Atos Administrativos")
         cargo = st.text_input("Cargo", placeholder="Ex: Escrevente")
 
         if st.button("Gerar Questão"):
-            with st.spinner("Criando..."):
-                prompt = (f"Gere 1 questão inédita em JSON. Disciplina: {disc}. Assunto: {assunto}. Banca: {banca}. Cargo: {cargo}. Jurisdição: {uf}. Nível: {nivel}. Retorne APENAS JSON.")
+            with st.spinner("Elaborando questão..."):
+                prompt = (
+                    "Gere 1 questão inédita em JSON com campos: enunciado, alternativas (A,B,C,D,E), gabarito (A–E), comentario. "
+                    f"Disciplina: {disc}. Assunto: {assunto}. Banca: {banca}. Cargo: {cargo}. Jurisdição: {uf}. "
+                    f"Nível: {nivel}. Cite artigos/súmulas. Retorne APENAS JSON."
+                )
                 res = processar_ia(prompt, task_type="text", temperature=0.3)
                 data = validate_json_response(res)
                 if data and validate_question_json(data)[0]:
                     st.session_state.q_atual = data
                     st.session_state.ver_resp = False
                     add_xp(10)
-                else: st.error("Erro na geração.")
+                else: st.error("Erro na geração. Tente novamente.")
 
         if 'q_atual' in st.session_state:
             q = st.session_state.q_atual
-            st.markdown(f"<div class='question-card'><h4>{disc} | {banca}</h4><p>{q['enunciado']}</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='question-card'><h4>{disc} | {banca} | {uf}</h4><p>{q['enunciado']}</p></div>", unsafe_allow_html=True)
             for k in ["A","B","C","D","E"]: st.write(f"**{k})** {q['alternativas'].get(k, '')}")
             if st.button("👁️ Ver Gabarito"): st.session_state.ver_resp = True
             if st.session_state.get('ver_resp'):
                 st.success(f"Gabarito: {q['gabarito']}")
                 st.info(f"Comentário: {q['comentario']}")
+                st.session_state.generated_questions.append(q)
+                if criar_docx(json.dumps(q, indent=2), "Questão"):
+                    st.download_button("💾 Baixar DOCX", criar_docx(json.dumps(q, indent=2), "Questão"), "Questao.docx")
 
     # 1.2 MESTRE DOS EDITAIS
     with tab_edital:
-        st.markdown("### 🎯 Verticalizador")
+        st.markdown("### 🎯 Verticalizador de Editais")
         file = st.file_uploader("Upload Edital (PDF/DOCX)", type=["pdf", "docx"])
         if st.button("Verticalizar"):
             if file:
-                st.info("Processando...")
-                # Lógica simplificada de extração
-                text = "Texto extraído simulado"
-                if file.type == "application/pdf" and PDFPLUMBER_AVAILABLE:
-                    import pdfplumber
-                    with pdfplumber.open(BytesIO(file.getvalue())) as pdf: text = "".join([p.extract_text() for p in pdf.pages])
-                
                 with st.spinner("IA Analisando..."):
-                    r = processar_ia(f"Verticalize este edital: {text[:3000]}", temperature=0.1)
+                    r = processar_ia(f"Verticalize este edital: {file.name}", temperature=0.1)
                     st.markdown(r)
                     add_xp(20)
 
-    # 1.3 SALA DE FOCO (POMODORO CORRIGIDO)
+    # 1.3 SALA DE FOCO (POMODORO)
     with tab_pomodoro:
         st.markdown("### 🍅 Sala de Foco & Produtividade")
-        
-        # --- Controles Superiores ---
-        c_modos, c_extra = st.columns([2, 1])
-        with c_modos:
-            mode_cols = st.columns(3)
-            if mode_cols[0].button("🧠 Foco (25m)", use_container_width=True):
-                st.session_state.pomo_mode = "Foco"
-                st.session_state.pomo_time_left = 25 * 60
-                st.session_state.pomo_initial_time = 25 * 60
-                st.session_state.pomo_state = "STOPPED"
-                st.rerun()
-            
-            if mode_cols[1].button("☕ Curto (5m)", use_container_width=True):
-                st.session_state.pomo_mode = "Curto"
-                st.session_state.pomo_time_left = 5 * 60
-                st.session_state.pomo_initial_time = 5 * 60
-                st.session_state.pomo_state = "STOPPED"
-                st.rerun()
-
-            if mode_cols[2].button("🧘 Longo (15m)", use_container_width=True):
-                st.session_state.pomo_mode = "Longo"
-                st.session_state.pomo_time_left = 15 * 60
-                st.session_state.pomo_initial_time = 15 * 60
-                st.session_state.pomo_state = "STOPPED"
-                st.rerun()
-
-        # --- Seletor de Tempo Personalizado (só aparece em Foco) ---
-        if st.session_state.pomo_mode == "Foco":
-            st.write("Configurar tempo de Foco:")
-            preset = st.radio("Presets:", ["Passos de bebê (10m)", "Popular (25m)", "Médio (40m)", "Estendido (60m)"], index=1, horizontal=True, label_visibility="collapsed")
-            # Atualiza tempo se estiver parado
-            if st.session_state.pomo_state == "STOPPED":
-                new_time = int(re.search(r'\d+', preset).group()) * 60
-                if new_time != st.session_state.pomo_initial_time:
-                    st.session_state.pomo_time_left = new_time
-                    st.session_state.pomo_initial_time = new_time
-
-        # --- Visual do Timer ---
-        mins, secs = divmod(st.session_state.pomo_time_left, 60)
-        time_str = f"{mins:02d}:{secs:02d}"
-        
-        st.markdown(f"""
-        <div class="timer-display">{time_str}</div>
-        <div class="timer-label">{st.session_state.pomo_mode}</div>
-        """, unsafe_allow_html=True)
-        
-        # Barra de Progresso
-        progresso = 1.0 - (st.session_state.pomo_time_left / st.session_state.pomo_initial_time)
-        st.progress(progresso)
-
-        # --- Botões de Ação (Play/Pause/Reset) ---
-        c_play, c_pause, c_reset = st.columns(3)
-        
-        if c_play.button("▶️ INICIAR", use_container_width=True, type="primary"):
-            st.session_state.pomo_state = "RUNNING"
-            st.rerun()
-            
-        if c_pause.button("⏸️ PAUSAR", use_container_width=True):
-            st.session_state.pomo_state = "PAUSED"
-            st.rerun()
-            
-        if c_reset.button("🔄 ZERAR", use_container_width=True):
-            st.session_state.pomo_state = "STOPPED"
-            st.session_state.pomo_time_left = st.session_state.pomo_initial_time
-            st.rerun()
-
-        # --- Lógica do Loop (Só roda se RUNNING) ---
-        if st.session_state.pomo_state == "RUNNING":
-            if st.session_state.pomo_time_left > 0:
-                time.sleep(1) # Aguarda 1s
-                st.session_state.pomo_time_left -= 1
-                st.rerun() # Recarrega a página para atualizar o timer
+        c_mode, c_config = st.columns([2, 1])
+        with c_mode:
+            st.write("#### Selecione o Ciclo")
+            modo_foco = st.radio("Nível:", 
+                ["Passos de bebê (10 min)", "Popular (20 min)", "Médio (40 min)", "Estendido (60 min)", "Personalizado"],
+                index=1, horizontal=True
+            )
+            if modo_foco == "Personalizado":
+                tempo_selecionado = st.slider("Minutos:", 5, 90, 25)
             else:
-                st.session_state.pomo_state = "STOPPED"
-                st.balloons()
-                st.success("Ciclo Concluído!")
-                add_xp(50)
-                # Toca som
-                st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
+                tempo_selecionado = int(re.search(r'\d+', modo_foco).group())
 
-        # --- Rádio Lofi ---
+        with c_config:
+            st.write("#### Configurações")
+            som = st.selectbox("Alarme:", ["Sound 1 (Ding)", "Mudo"])
+            
         with st.expander("🎵 Rádio Lofi (Música de Fundo)", expanded=False):
             st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
+
+        st.markdown("---")
+        
+        col_timer_l, col_timer_c, col_timer_r = st.columns([1, 2, 1])
+        with col_timer_c:
+            if st.session_state.pomo_state == "STOPPED":
+                if st.session_state.pomo_initial_time != tempo_selecionado * 60:
+                    st.session_state.pomo_initial_time = tempo_selecionado * 60
+                    st.session_state.pomo_time_left = tempo_selecionado * 60
+            
+            mins, secs = divmod(st.session_state.pomo_time_left, 60)
+            time_str = f"{mins:02d}:{secs:02d}"
+            
+            st.markdown(f"""
+            <div class='timer-display'>{time_str}</div>
+            <div class='timer-label'>{st.session_state.pomo_mode} • {st.session_state.pomo_state}</div>
+            """, unsafe_allow_html=True)
+            
+            progresso = 1.0
+            if st.session_state.pomo_initial_time > 0:
+                progresso = st.session_state.pomo_time_left / st.session_state.pomo_initial_time
+            st.progress(progresso)
+
+            c_play, c_pause, c_reset = st.columns(3)
+            
+            if c_play.button("▶️ INICIAR", use_container_width=True, type="primary"):
+                st.session_state.pomo_state = "RUNNING"
+                st.rerun()
+                
+            if c_pause.button("⏸️ PAUSAR", use_container_width=True):
+                st.session_state.pomo_state = "PAUSED"
+                st.rerun()
+                
+            if c_reset.button("🔄 ZERAR", use_container_width=True):
+                st.session_state.pomo_state = "STOPPED"
+                st.session_state.pomo_time_left = st.session_state.pomo_initial_time
+                st.rerun()
+
+            if st.session_state.pomo_state == "RUNNING":
+                if st.session_state.pomo_time_left > 0:
+                    time.sleep(1)
+                    st.session_state.pomo_time_left -= 1
+                    st.rerun()
+                else:
+                    st.session_state.pomo_state = "STOPPED"
+                    st.balloons()
+                    add_xp(50)
+                    if som != "Mudo":
+                        st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mp3"></audio>""", unsafe_allow_html=True)
 
     # 1.4 FLASHCARDS
     with tab_flash:
         st.markdown("### ⚡ Flashcards")
-        tema = st.text_input("Tema")
+        tema = st.text_input("Tema para memorizar")
         if st.button("Criar Flashcard"):
             r = processar_ia(f"Crie flashcard sobre {tema}. Retorne: PERGUNTA --- RESPOSTA")
             if "---" in r:
                 f, b = r.split("---")
-                st.session_state.cards.append({"front": f, "back": b})
+                st.session_state.cards.append({"front": f.strip(), "back": b.strip()})
                 st.success("Criado!")
                 add_xp(5)
-        
+            else: st.error("Erro formato.")
+            
         if st.session_state.cards:
+            st.write(f"Total: {len(st.session_state.cards)}")
             for i, c in enumerate(st.session_state.cards):
                 st.info(f"Card {i+1}: {c['front']}")
+            csv = "front,back\n" + "\n".join([f"{c['front']},{c['back']}" for c in st.session_state.cards])
+            st.download_button("💾 Baixar Anki CSV", csv, "anki.csv")
 
     # 1.5 CRONOGRAMA
     with tab_crono:
         st.markdown("### 📅 Cronograma")
         h = st.slider("Horas/dia", 1, 8, 4)
-        topicos = st.text_area("Tópicos")
-        if st.button("Gerar"):
-            r = processar_ia(f"Crie cronograma para {topicos} com {h}h/dia.")
-            st.write(r)
+        topicos = st.text_area("Listar tópicos (um por linha)")
+        if st.button("Gerar Plano"):
+            topics = [t for t in topicos.split('\n') if t.strip()]
+            plan = []
+            base = datetime.today()
+            for i, t in enumerate(topics):
+                d = base + timedelta(days=i)
+                plan.append(f"{d.strftime('%d/%m')} - {t} ({h}h)")
+            res = "\n".join(plan)
+            st.text_area("Resultado", res, height=300)
+            if criar_docx(res): st.download_button("💾 Baixar Plano", criar_docx(res), "Plano.docx")
             add_xp(15)
 
 # --- MENTOR ---
 elif menu_opcao == "💬 Mentor Jurídico":
     st.title("💬 Mentor Jurídico")
+    perfil = st.selectbox("Perfil", ["Professor Didático", "Doutrinador (Técnico)", "Jurisprudencial"])
     if "chat" not in st.session_state: st.session_state.chat = []
     for m in st.session_state.chat: st.chat_message(m["role"]).write(m["content"])
     
@@ -434,30 +452,56 @@ elif menu_opcao == "💬 Mentor Jurídico":
         st.chat_message("user").write(p)
         with st.chat_message("assistant"):
             with st.spinner("Pensando..."):
-                r = processar_ia(p)
+                sys = f"Atue como {perfil}. Cite leis."
+                r = processar_ia(p, system_instruction=sys)
                 st.write(r)
                 st.session_state.chat.append({"role":"assistant", "content":r})
                 add_xp(5)
+    
+    st.markdown("---")
+    st.markdown("### ✅ Checklist de Riscos")
+    caso = st.text_area("Descreva o caso")
+    if st.button("Gerar Checklist"):
+        r = processar_ia(f"Gere checklist de riscos para: {caso}", temperature=0.2)
+        st.write(r)
 
 # --- CONTRATOS ---
 elif menu_opcao == "📄 Redação de Contratos":
     st.title("📄 Redação de Contratos")
-    tipo = st.selectbox("Tipo", ["Contrato", "Petição"])
+    tipo = st.selectbox("Tipo", ["Contrato", "Petição", "Procuração"])
+    c1, c2 = st.columns(2)
+    pa = c1.text_input("Parte A")
+    pb = c2.text_input("Parte B")
     detalhes = st.text_area("Detalhes")
     if st.button("Redigir"):
-        with st.spinner("Escrevendo..."):
-            r = processar_ia(f"Redija {tipo}: {detalhes}", temperature=0.2)
-            st.write(r)
-            add_xp(20)
+        if pa and pb and detalhes:
+            with st.spinner("Escrevendo..."):
+                prompt = f"Redija {tipo}. Parte A: {pa}. Parte B: {pb}. Detalhes: {detalhes}. Formal."
+                r = processar_ia(prompt, temperature=0.2)
+                st.text_area("Minuta", r, height=400)
+                if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), f"{tipo}.docx")
+                add_xp(20)
+        else: st.error("Preencha os campos.")
 
 # --- CARTÓRIO OCR ---
 elif menu_opcao == "🏢 Cartório Digital (OCR)":
     st.title("🏢 Cartório Digital")
-    u = st.file_uploader("Imagem", type=["jpg", "png", "pdf"])
-    if u and st.button("Transcrever"):
+    st.info("Usa Visão Computacional para transcrever certidões.")
+    u = st.file_uploader("Imagem da Certidão", type=["jpg", "png", "pdf"])
+    if u and st.button("Transcrever Inteiro Teor"):
         with st.spinner("Lendo..."):
-            r = processar_ia("Transcreva como Inteiro Teor.", file_bytes=u.getvalue(), task_type="vision")
-            st.write(r)
+            file_bytes = u.getvalue()
+            if PIL_AVAILABLE and u.type in ["image/jpeg", "image/png"]:
+                try:
+                    img = Image.open(BytesIO(file_bytes)).convert("L")
+                    img = ImageOps.autocontrast(img)
+                    buf = BytesIO(); img.save(buf, format="PNG")
+                    file_bytes = buf.getvalue()
+                except: pass
+            
+            r = processar_ia("Transcreva fielmente como Inteiro Teor. Indique [Selo], [Assinatura].", file_bytes=file_bytes, task_type="vision")
+            st.text_area("Resultado", r, height=400)
+            if criar_docx(r): st.download_button("💾 Baixar", criar_docx(r), "InteiroTeor.docx")
             add_xp(25)
 
 # --- TRANSCRIÇÃO ---
@@ -466,17 +510,22 @@ elif menu_opcao == "🎙️ Transcrição":
     tab_mic, tab_up = st.tabs(["🎤 Gravar", "📂 Upload"])
     with tab_mic:
         audio = st.audio_input("Gravar")
-        if audio and st.button("Transcrever"):
+        if audio and st.button("Transcrever Gravação"):
             with st.spinner("Processando..."):
                 r = processar_ia("", file_bytes=audio.getvalue(), task_type="audio")
                 st.write(r)
+                if criar_docx(r): st.download_button("Download", criar_docx(r), "Audio.docx")
+                summ = processar_ia(f"Resuma: {r}")
+                st.info("Resumo:"); st.write(summ)
                 add_xp(20)
     with tab_up:
-        upl = st.file_uploader("Arquivo", type=["mp3","wav"])
-        if upl and st.button("Transcrever"):
+        upl = st.file_uploader("Arquivo", type=["mp3","wav","m4a"])
+        if upl and st.button("Transcrever Arquivo"):
             with st.spinner("Processando..."):
                 r = processar_ia("", file_bytes=upl.getvalue(), task_type="audio")
                 st.write(r)
+                summ = processar_ia(f"Resuma: {r}")
+                st.info("Resumo:"); st.write(summ)
                 add_xp(20)
 
 # --- FEEDBACK ---
@@ -501,5 +550,5 @@ elif menu_opcao == "📊 Logs":
 # --- SOBRE ---
 else:
     st.title("👤 Sobre")
-    st.write("Carmélio AI - v9.2 Definitiva")
+    st.write("Carmélio AI - v10.1 Stable")
     st.write("Desenvolvido por Arthur Carmélio.")
