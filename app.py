@@ -57,7 +57,7 @@ def check_rate_limit():
 def mark_call(): st.session_state.last_call = time.time()
 
 # =============================================================================
-# 4. MOTOR DE IA (AUTO-DETECTOR ROBUSTO)
+# 4. MOTOR DE IA (AUTO-DETECTOR)
 # =============================================================================
 @st.cache_resource
 def get_best_model():
@@ -75,7 +75,7 @@ def get_best_model():
         except:
             return None, "Erro de Chave API"
 
-        # Ordem de preferência
+        # Prioridade (Flash é o melhor para ler editais longos)
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         
         escolhido = None
@@ -121,14 +121,15 @@ def extract_json_surgical(text):
     return None
 
 # =============================================================================
-# 5. MANIPULAÇÃO DE ARQUIVOS (ANTI-LOOP)
+# 5. MANIPULAÇÃO DE ARQUIVOS (LEITURA INTELIGENTE)
 # =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
         text_content = ""
         with pdfplumber.open(BytesIO(file_obj.getvalue())) as pdf:
-            max_pages = 50 # Limite de segurança
+            # Aumentei para 60 páginas para garantir que pegue o Anexo de Conteúdo
+            max_pages = 60 
             for i, page in enumerate(pdf.pages):
                 if i >= max_pages: break
                 extracted = page.extract_text()
@@ -336,12 +337,11 @@ elif menu == "📝 Gere seu Contrato":
                     ans = call_gemini("Revisor.", f"Texto: {full_text}\nPedido: {q}")
                     st.write(ans)
 
-# --- 3. MESTRE DOS EDITAIS (AGORA COM ANTI-LOOP) ---
+# --- 3. MESTRE DOS EDITAIS (AGORA FOCADO EM CONTEÚDO REAL) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
     # --- ÁREA DE UPLOAD ---
-    # Só mostra o uploader se NÃO tiver texto carregado
     if not st.session_state.edital_text:
         st.markdown("""
         ### 🚀 Professor de Edital
@@ -350,23 +350,22 @@ elif menu == "🎯 Mestre dos Editais":
         f = st.file_uploader("Carregar PDF", type=["pdf"])
         
         if f:
-            # VERIFICA SE O ARQUIVO É NOVO (Evita Loop)
             if f.name != st.session_state.edital_filename:
-                with st.spinner("Lendo (Máx 50 págs)..."):
+                with st.spinner("Lendo (Máx 60 págs)..."):
                     texto = read_pdf_safe(f)
                     
                     if texto and len(texto) > 100:
                         st.session_state.edital_text = texto
-                        st.session_state.edital_filename = f.name # Marca como lido
+                        st.session_state.edital_filename = f.name
                         st.session_state.quiz_data = None 
                         st.session_state.quiz_show_answer = False
                         st.success("Edital Mapeado! A interface vai atualizar...")
                         time.sleep(1)
-                        st.rerun() # Força atualização para mostrar a área de treino
+                        st.rerun()
                     else:
                         st.error("⚠️ Este PDF parece ser uma imagem (escaneado). Tente um PDF com texto selecionável.")
     
-    # --- ÁREA DE TREINO (Aparece automaticamente se tiver texto) ---
+    # --- ÁREA DE TREINO ---
     else:
         # Barra de status do arquivo
         c_info, c_reset = st.columns([3, 1])
@@ -382,34 +381,49 @@ elif menu == "🎯 Mestre dos Editais":
         col_config, col_action = st.columns([2, 1])
         with col_config:
             dificuldade = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
-            foco = st.text_input("Focar em tema específico? (Opcional)", placeholder="Ex: Direito Penal, Crase...")
+            foco = st.text_input("Focar em tema específico? (Opcional)", placeholder="Ex: Direito Penal, Crase, Informática...")
         
         with col_action:
             st.write("") 
             st.write("") 
             if st.button("🔥 GERAR QUESTÃO", type="primary", use_container_width=True):
                 with st.spinner(f"Elaborando questão ({dificuldade})..."):
-                    tema_prompt = f"sobre o tema '{foco}'" if foco else "sobre um tema aleatório do conteúdo"
+                    
+                    # --- A MÁGICA DO PROMPT CORRIGIDO ---
+                    tema_extra = f"FOCO OBRIGATÓRIO: {foco}." if foco else "Escolha um tema aleatório do CONTEÚDO PROGRAMÁTICO (Leis, Teorias, Matérias)."
                     
                     prompt = f"""
-                    Aja como Banca Examinadora. Analise o edital.
-                    Crie questão múltipla escolha {dificuldade} {tema_prompt}.
-                    Texto edital: {st.session_state.edital_text[:25000]}
+                    Aja como Banca Examinadora Sênior.
                     
-                    REGRAS:
-                    1. Gere 4 alternativas (A, B, C, D).
-                    2. Forneça explicação detalhada no final.
+                    MISSÃO: Analisar o edital e criar uma questão de prova TÉCNICA.
+                    
+                    ❌ O QUE IGNORAR (PROIBIDO):
+                    - Datas de inscrição, valor da taxa, isenção.
+                    - Número de vagas, requisitos físicos, exames médicos.
+                    - Regras do local de prova ou caneta preta/azul.
+                    
+                    ✅ O QUE USAR (OBRIGATÓRIO):
+                    - Busque no texto as seções: "CONTEÚDO PROGRAMÁTICO", "CONHECIMENTOS ESPECÍFICOS" ou "ANEXOS DE MATÉRIAS".
+                    - Crie uma questão sobre: Direito, Português, Matemática, Informática ou Legislação Específica citada.
+                    
+                    {tema_extra}
+                    Dificuldade: {dificuldade}.
                     
                     SAÍDA JSON:
                     {{
-                        "materia": "Nome da Matéria",
-                        "enunciado": "Pergunta...",
+                        "materia": "Nome da Matéria (Ex: Direito Constitucional)",
+                        "enunciado": "Pergunta técnica...",
                         "alternativas": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
                         "correta": "A",
-                        "explicacao": "..."
+                        "explicacao": "Explique com base na teoria ou lei."
                     }}
                     """
-                    res = call_gemini("Gere APENAS JSON válido.", prompt, json_mode=True)
+                    
+                    # Passamos apenas os primeiros 30k caracteres para não estourar a memória rápida
+                    texto_limitado = st.session_state.edital_text[:30000]
+                    full_input = f"{prompt}\n\nTEXTO DO EDITAL:\n{texto_limitado}"
+                    
+                    res = call_gemini("Gere APENAS JSON válido.", full_input, json_mode=True)
                     data = extract_json_surgical(res)
                     
                     if data:
