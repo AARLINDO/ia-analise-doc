@@ -58,22 +58,27 @@ def check_rate_limit():
 def mark_call(): st.session_state.last_call = time.time()
 
 # =============================================================================
-# 4. MOTOR DE IA (GOOGLE GEMINI PURO)
+# 4. MOTOR DE IA (GOOGLE GEMINI 1.5 FLASH)
 # =============================================================================
 @st.cache_resource
 def get_gemini_model():
     """Configura e retorna o modelo Gemini uma única vez."""
+    # Tenta pegar a chave do secrets ou do ambiente
     api_key = st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     
     if not api_key: return None
     
     try:
         genai.configure(api_key=api_key)
-        # Usamos o 1.5 Flash: Rápido, Barato e Contexto Gigante (Ideal para Editais)
+        # Tenta o modelo Flash (mais rápido e contexto maior)
         return genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        st.error(f"Erro ao conectar no Google: {e}")
-        return None
+        # Se der erro, tenta o Pro como fallback
+        try:
+            return genai.GenerativeModel('gemini-pro')
+        except:
+            st.error(f"Erro Crítico ao conectar no Google: {e}")
+            return None
 
 def call_gemini(system_prompt, user_prompt, json_mode=False):
     """Função única para chamar o Google."""
@@ -81,14 +86,14 @@ def call_gemini(system_prompt, user_prompt, json_mode=False):
     mark_call()
     
     model = get_gemini_model()
-    if not model: return "⚠️ Erro: Chave API do Google não encontrada."
+    if not model: return "⚠️ Erro: Chave API do Google não configurada no secrets.toml."
     
     try:
         # Gemini funciona melhor com um prompt único concatenado
         full_prompt = f"SISTEMA: {system_prompt}\n\nUSUÁRIO: {user_prompt}"
         
         if json_mode:
-            full_prompt += "\n\nIMPORTANTE: Responda APENAS com um JSON válido. Não use markdown (```json)."
+            full_prompt += "\n\nIMPORTANTE: Responda APENAS com um JSON válido. Não use blocos de código (```json)."
             
         response = model.generate_content(full_prompt)
         return response.text
@@ -182,7 +187,7 @@ def add_xp(amount):
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
-    st.info("🧠 **Motor Ativo:** Google Gemini 1.5")
+    st.success("🧠 **Gemini 1.5 Ativo**")
     
     st.markdown("---")
     menu = st.radio("Navegação", [
