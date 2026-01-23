@@ -4,7 +4,8 @@ import os
 import json
 import time
 import re
-from datetime import datetime
+import random
+from datetime import datetime, date
 from io import BytesIO
 
 # =============================================================================
@@ -39,35 +40,79 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 3. MÓDULO DE INTERFACE (SIDEBAR E WIDGETS)
+# 3. MÓDULO DE INTERFACE (SIDEBAR, WIDGETS E DEVOCIONAL)
 # =============================================================================
+
+def get_daily_verse():
+    """Retorna um versículo baseado no dia do ano (sempre o mesmo no dia)."""
+    versiculos = [
+        {"ref": "Josué 1:9", "txt": "Não fui eu que ordenei a você? Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar."},
+        {"ref": "Filipenses 4:13", "txt": "Tudo posso naquele que me fortalece."},
+        {"ref": "Salmos 37:5", "txt": "Entregue o seu caminho ao Senhor; confie nele, e ele agirá."},
+        {"ref": "Isaías 41:10", "txt": "Por isso não tema, pois estou com você; não tenha medo, pois sou o seu Deus. Eu o fortalecerei e o ajudarei; eu o segurarei com a minha mão direita vitoriosa."},
+        {"ref": "Jeremias 29:11", "txt": "Porque sou eu que conheço os planos que tenho para vocês', diz o Senhor, 'planos de fazê-los prosperar e não de causar dano, planos de dar a vocês esperança e um futuro."},
+        {"ref": "Provérbios 16:3", "txt": "Consagre ao Senhor tudo o que você faz, e os seus planos serão bem-sucedidos."},
+        {"ref": "Salmos 121:1-2", "txt": "Levanto os meus olhos para os montes e pergunto: De onde me vem o socorro? O meu socorro vem do Senhor, que fez os céus e a terra."},
+        {"ref": "2 Timóteo 1:7", "txt": "Pois Deus não nos deu espírito de covardia, mas de poder, de amor e de equilíbrio."},
+        {"ref": "Salmos 23:1", "txt": "O Senhor é o meu pastor; de nada terei falta."},
+        {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas lhes serão acrescentadas."},
+        {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças. Voam alto como águias; correm e não ficam exaustos, andam e não se cansam."},
+        {"ref": "Tiago 1:5", "txt": "Se algum de vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade; e lhe será concedida."},
+        {"ref": "Salmos 119:105", "txt": "A tua palavra é lâmpada que ilumina os meus passos e luz que clareia o meu caminho."},
+        {"ref": "Romanos 8:31", "txt": "Que diremos, pois, diante dessas coisas? Se Deus é por nós, quem será contra nós?"},
+        {"ref": "Provérbios 2:6", "txt": "Pois o Senhor é quem dá sabedoria; de sua boca procedem o conhecimento e o discernimento."}
+    ]
+    # Usa a data de hoje como "semente" para escolher o versículo
+    random.seed(date.today().toordinal())
+    return random.choice(versiculos)
+
 def render_sidebar_widgets():
     """
     Renderiza os Widgets de Foco (Timer Pomodoro e Player de Música)
     utilizando HTML/JS injetado para não travar o loop do Python.
     """
-    sidebar_html = """
+    
+    # 1. RECUPERA O VERSÍCULO DO DIA
+    v = get_daily_verse()
+    
+    # Estilos CSS
+    sidebar_html = f"""
     <style>
-        .widget-box {
+        .widget-box {{
             background-color: #1F2430; border: 1px solid #374151;
             border-radius: 12px; padding: 15px; text-align: center;
             color: white; font-family: sans-serif; margin-bottom: 15px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .title { font-size: 12px; font-weight: bold; color: #8B949E; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        .time-display { font-size: 36px; font-weight: 800; margin: 10px 0; color: #4285F4; text-shadow: 0 0 10px rgba(66, 133, 244, 0.3); }
-        .btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin: 3px; font-size: 12px; font-weight: 600; transition: all 0.2s; }
-        .btn:hover { opacity: 0.9; transform: scale(1.05); }
-        .btn-primary { background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; }
-        .btn-danger { background: linear-gradient(135deg, #DC2626, #B91C1C); color: white; }
-        .btn-warn { background: linear-gradient(135deg, #D97706, #B45309); color: white; }
-        .btn-dark { background: #374151; color: #E5E7EB; border: 1px solid #4B5563; }
-        .presets { margin-bottom: 10px; display: flex; justify-content: center; gap: 5px; }
-        .preset-btn { background: transparent; border: 1px solid #4B5563; color: #9CA3AF; padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; }
-        .preset-btn:hover { border-color: #60A5FA; color: #60A5FA; }
-        .player-status { font-size: 11px; color: #34D399; margin-top: 5px; display: none; }
-        iframe { display: none; }
+        }}
+        .devotional-box {{
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border-left: 4px solid #F59E0B; /* Dourado */
+            text-align: left; padding: 12px; margin-bottom: 20px;
+            border-radius: 8px;
+        }}
+        .verse-text {{ font-style: italic; font-size: 13px; color: #E2E8F0; margin-bottom: 8px; line-height: 1.4; }}
+        .verse-ref {{ font-size: 11px; font-weight: bold; color: #F59E0B; text-align: right; }}
+        
+        .title {{ font-size: 12px; font-weight: bold; color: #8B949E; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }}
+        .time-display {{ font-size: 36px; font-weight: 800; margin: 10px 0; color: #4285F4; text-shadow: 0 0 10px rgba(66, 133, 244, 0.3); }}
+        .btn {{ border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin: 3px; font-size: 12px; font-weight: 600; transition: all 0.2s; }}
+        .btn:hover {{ opacity: 0.9; transform: scale(1.05); }}
+        .btn-primary {{ background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; }}
+        .btn-danger {{ background: linear-gradient(135deg, #DC2626, #B91C1C); color: white; }}
+        .btn-warn {{ background: linear-gradient(135deg, #D97706, #B45309); color: white; }}
+        .btn-dark {{ background: #374151; color: #E5E7EB; border: 1px solid #4B5563; }}
+        .presets {{ margin-bottom: 10px; display: flex; justify-content: center; gap: 5px; }}
+        .preset-btn {{ background: transparent; border: 1px solid #4B5563; color: #9CA3AF; padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; }}
+        .preset-btn:hover {{ border-color: #60A5FA; color: #60A5FA; }}
+        .player-status {{ font-size: 11px; color: #34D399; margin-top: 5px; display: none; }}
+        iframe {{ display: none; }}
     </style>
+    
+    <div class="devotional-box">
+        <div class="title" style="color:#F59E0B; margin-bottom:5px;">📖 Palavra do Dia</div>
+        <div class="verse-text">"{v['txt']}"</div>
+        <div class="verse-ref">{v['ref']}</div>
+    </div>
     
     <div class="widget-box">
         <div class="title">🍅 Pomodoro Focus</div>
@@ -101,47 +146,46 @@ def render_sidebar_widgets():
         let time = 25 * 60; let initialTime = 25 * 60; let interval = null;
         const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
 
-        function updateDisplay() {
+        function updateDisplay() {{
             let m = Math.floor(time / 60); let s = time % 60;
             document.getElementById('timer').innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-        }
-        function setTime(mins) {
+        }}
+        function setTime(mins) {{
             pauseTimer(); time = mins * 60; initialTime = time; updateDisplay();
             document.getElementById('pomo-status').innerText = mins + " min definido";
-        }
-        function startTimer() {
+        }}
+        function startTimer() {{
             if (interval) return;
             document.getElementById('pomo-status').innerText = "Focando...";
-            interval = setInterval(() => {
-                if (time > 0) { time--; updateDisplay(); } 
-                else { clearInterval(interval); interval = null; document.getElementById('timer').innerText = "00:00"; alarm.play(); document.getElementById('pomo-status').innerText = "Acabou!"; }
-            }, 1000);
-        }
-        function pauseTimer() { clearInterval(interval); interval = null; document.getElementById('pomo-status').innerText = "Pausado"; }
-        function resetTimer() { pauseTimer(); time = initialTime; updateDisplay(); document.getElementById('pomo-status').innerText = "Reiniciado"; }
+            interval = setInterval(() => {{
+                if (time > 0) {{ time--; updateDisplay(); }} 
+                else {{ clearInterval(interval); interval = null; document.getElementById('timer').innerText = "00:00"; alarm.play(); document.getElementById('pomo-status').innerText = "Acabou!"; }}
+            }}, 1000);
+        }}
+        function pauseTimer() {{ clearInterval(interval); interval = null; document.getElementById('pomo-status').innerText = "Pausado"; }}
+        function resetTimer() {{ pauseTimer(); time = initialTime; updateDisplay(); document.getElementById('pomo-status').innerText = "Reiniciado"; }}
 
         var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
         var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
         var player;
-        function onYouTubeIframeAPIReady() {
-            player = new YT.Player('youtube-player', {
+        function onYouTubeIframeAPIReady() {{
+            player = new YT.Player('youtube-player', {{
                 height: '0', width: '0', videoId: 'jfKfPfyJRdk',
-                playerVars: { 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk' }
-            });
-        }
-        function playMusic() { if(player) { player.playVideo(); document.getElementById('music-status').style.display='block'; document.getElementById('music-status').innerText="Tocando 🎵"; } }
-        function pauseMusic() { if(player) { player.pauseVideo(); document.getElementById('music-status').innerText="Pausado"; } }
-        function volUp() { if(player) { player.setVolume(player.getVolume() + 10); } }
-        function volDown() { if(player) { player.setVolume(player.getVolume() - 10); } }
+                playerVars: {{ 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk' }}
+            }});
+        }}
+        function playMusic() {{ if(player) {{ player.playVideo(); document.getElementById('music-status').style.display='block'; document.getElementById('music-status').innerText="Tocando 🎵"; }} }}
+        function pauseMusic() {{ if(player) {{ player.pauseVideo(); document.getElementById('music-status').innerText="Pausado"; }} }}
+        function volUp() {{ if(player) {{ player.setVolume(player.getVolume() + 10); }} }}
+        function volDown() {{ if(player) {{ player.setVolume(player.getVolume() - 10); }} }}
     </script>
     """
-    components.html(sidebar_html, height=350)
+    components.html(sidebar_html, height=520) # Aumentei altura para caber tudo
 
 # =============================================================================
-# 4. MOTOR DE INTELIGÊNCIA ARTIFICIAL
+# 4. FUNÇÕES DE IA & ARQUIVOS
 # =============================================================================
 def check_rate_limit():
-    """Evita chamadas excessivas à API (proteção anti-spam)."""
     if "last_call" not in st.session_state: st.session_state.last_call = 0
     if time.time() - st.session_state.last_call < 0.5: return True 
     return False
@@ -150,7 +194,6 @@ def mark_call(): st.session_state.last_call = time.time()
 
 @st.cache_resource
 def get_best_model():
-    """Configura o Gemini e seleciona o melhor modelo disponível."""
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key: return None, "⚠️ Configure secrets.toml"
     try:
@@ -164,7 +207,6 @@ def get_best_model():
     except Exception as e: return None, f"Erro Fatal: {str(e)}"
 
 def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
-    """Função central para chamar a IA."""
     if check_rate_limit(): return None
     mark_call()
     model, name = get_best_model()
@@ -180,7 +222,6 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
     except Exception as e: return f"Erro IA: {str(e)}"
 
 def extract_json_surgical(text):
-    """Limpa a resposta da IA para garantir que seja um JSON válido."""
     try:
         text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
@@ -188,9 +229,6 @@ def extract_json_surgical(text):
     except: pass
     return None
 
-# =============================================================================
-# 5. GERENCIAMENTO DE ARQUIVOS
-# =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return None
     try:
@@ -242,7 +280,7 @@ def add_xp(amount):
     st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
 
 # =============================================================================
-# 6. CSS E ESTADO
+# 6. ESTILO E ESTADO
 # =============================================================================
 st.markdown("""
 <style>
@@ -269,7 +307,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicialização de Estado (Session State)
+# Inicialização de Estado
 keys = {
     "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
     "contract_meta": {}, "chat_history": [], "edital_text": "", 
@@ -284,7 +322,7 @@ for k, v in keys.items():
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
-    render_sidebar_widgets() # Widget HTML
+    render_sidebar_widgets() # Widget HTML (DEVOCIONAL + TIMER + MÚSICA)
     st.markdown("---")
     
     model_obj, status_msg = get_best_model()
@@ -352,7 +390,7 @@ elif menu == "📝 Gere seu Contrato":
                             st.session_state.contract_step = 2
                             add_xp(25)
                             st.rerun()
-                        else: st.error("Erro ao gerar minuta.")
+                        else: st.error("Erro.")
     elif step == 2:
         st.header("📑 Revisão"); 
         if st.button("➕ Cláusula"): st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."}); st.rerun()
@@ -404,7 +442,7 @@ elif menu == "🎯 Mestre dos Editais":
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto (imagem).")
+                else: st.error("PDF sem texto.")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -438,6 +476,7 @@ elif menu == "🎯 Mestre dos Editais":
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
                 
+                # BOTÃO DE DOWNLOAD DA QUESTÃO
                 q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
                 docx_q = create_generic_docx(q_text, "Questão de Concurso")
                 st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
