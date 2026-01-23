@@ -1,7 +1,5 @@
 streamlit
-groq
 python-docx
 pdfplumber
 Pillow
-google-generativeai
-gemini-1.5-flash
+google-generativeai>=0.7.2
