@@ -3,3 +3,5 @@ groq
 python-docx
 pdfplumber
 Pillow
+google-generativeai
+openai
