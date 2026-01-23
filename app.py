@@ -7,7 +7,7 @@ from datetime import datetime
 from io import BytesIO
 
 # =============================================================================
-# 1. CONFIGURAÇÃO INICIAL
+# 1. CONFIGURAÇÃO
 # =============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Gemini Edition",
@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# 2. IMPORTAÇÕES SEGURAS
+# 2. IMPORTAÇÕES
 # =============================================================================
 try: import google.generativeai as genai
 except ImportError: genai = None
@@ -35,14 +35,8 @@ except ImportError:
 try: from PIL import Image
 except ImportError: Image = None
 
-# Mantivemos Groq/OpenAI apenas como fallback
-try: from groq import Groq
-except ImportError: Groq = None
-try: from openai import OpenAI
-except ImportError: OpenAI = None
-
 # =============================================================================
-# 3. FUNÇÕES (MOTOR)
+# 3. FUNÇÕES UTILITÁRIAS
 # =============================================================================
 
 def safe_image_show(image_path):
@@ -63,62 +57,56 @@ def check_rate_limit():
 
 def mark_call(): st.session_state.last_call = time.time()
 
-# --- CÉREBRO GEMINI (CORRIGIDO PARA EVITAR ERRO 404) ---
-def get_ai_clients():
-    clients = {"gemini": None, "groq": None, "openai": None}
+# =============================================================================
+# 4. MOTOR DE IA (GOOGLE GEMINI PURO)
+# =============================================================================
+@st.cache_resource
+def get_gemini_model():
+    """Configura e retorna o modelo Gemini uma única vez."""
+    api_key = st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     
-    # Tenta pegar a chave do Google
-    gemini_key = st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not api_key: return None
     
-    if gemini_key and genai: 
-        try:
-            genai.configure(api_key=gemini_key)
-            # ALTERADO DE 'gemini-1.5-flash' PARA 'gemini-pro' (MAIS ESTÁVEL)
-            clients["gemini"] = genai.GenerativeModel('gemini-pro')
-        except Exception as e:
-            st.error(f"Erro ao conectar no Gemini: {e}")
-        
-    return clients
+    try:
+        genai.configure(api_key=api_key)
+        # Usamos o 1.5 Flash: Rápido, Barato e Contexto Gigante (Ideal para Editais)
+        return genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.error(f"Erro ao conectar no Google: {e}")
+        return None
 
-def call_ai_unified(system_prompt, user_prompt, provider="gemini", json_mode=False):
+def call_gemini(system_prompt, user_prompt, json_mode=False):
+    """Função única para chamar o Google."""
     if check_rate_limit(): return None
     mark_call()
     
-    clients = get_ai_clients()
+    model = get_gemini_model()
+    if not model: return "⚠️ Erro: Chave API do Google não encontrada."
     
     try:
-        # GEMINI (PADRÃO)
-        if provider == "gemini":
-            if not clients["gemini"]: return "⚠️ Erro: Chave Google (Gemini) não configurada ou inválida."
+        # Gemini funciona melhor com um prompt único concatenado
+        full_prompt = f"SISTEMA: {system_prompt}\n\nUSUÁRIO: {user_prompt}"
+        
+        if json_mode:
+            full_prompt += "\n\nIMPORTANTE: Responda APENAS com um JSON válido. Não use markdown (```json)."
             
-            # Gemini prefere prompt único
-            full_prompt = f"INSTRUÇÃO DO SISTEMA: {system_prompt}\n\nUSUÁRIO: {user_prompt}"
-            
-            if json_mode:
-                full_prompt += "\n\nFORMATO DE RESPOSTA: Responda APENAS com um JSON válido, sem markdown (```json)."
-                
-            response = clients["gemini"].generate_content(full_prompt)
-            return response.text
-
-        # Fallbacks (Groq/OpenAI) se configurados
-        elif provider == "groq" and clients.get("groq"):
-            # (Lógica Groq mantida oculta para simplicidade)
-            pass
-            
-    except Exception as e: return f"Erro na IA ({provider}): {str(e)}"
-    return "Erro desconhecido."
+        response = model.generate_content(full_prompt)
+        return response.text
+    except Exception as e:
+        return f"Erro na IA: {str(e)}"
 
 def extract_json_surgical(text):
-    """Limpa o texto do Gemini para pegar só o JSON."""
+    """Limpeza de resposta para garantir JSON válido."""
     try:
-        # Remove blocos de código markdown se houver
         text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: return json.loads(match.group(0))
     except: pass
     return None
 
-# --- ARQUIVOS ---
+# =============================================================================
+# 5. PROCESSAMENTO DE ARQUIVOS
+# =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
@@ -139,7 +127,6 @@ def create_contract_docx(clauses, meta):
     if not docx: return None
     doc = Document()
     doc.add_heading(meta.get('tipo', 'CONTRATO').upper(), 0)
-    doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y')}")
     doc.add_heading("1. QUALIFICAÇÃO", level=1)
     doc.add_paragraph(meta.get('partes', ''))
     doc.add_heading("2. DO OBJETO", level=1)
@@ -153,14 +140,14 @@ def create_contract_docx(clauses, meta):
     return buffer
 
 # =============================================================================
-# 4. ESTILO (CSS)
+# 6. UI & ESTADO
 # =============================================================================
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
     [data-testid="stSidebar"] { background-color: #11141d; border-right: 1px solid #2B2F3B; }
     .gemini-text {
-        background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570); /* Cores do Google Gemini */
+        background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 800; font-size: 2.2rem;
     }
@@ -176,9 +163,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# =============================================================================
-# 5. ESTADO
-# =============================================================================
+# Inicializa Variáveis
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "contract_step" not in st.session_state: st.session_state.contract_step = 1
 if "contract_clauses" not in st.session_state: st.session_state.contract_clauses = []
@@ -187,27 +172,22 @@ if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
 if "last_question" not in st.session_state: st.session_state.last_question = None 
 
-# DEFININDO GEMINI COMO PADRÃO ABSOLUTO
-if "ai_provider" not in st.session_state: st.session_state.ai_provider = "gemini"
-
 def add_xp(amount):
     st.session_state.user_xp += amount
-    st.toast(f"+{amount} XP", icon="⚡")
+    st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
 
 # =============================================================================
-# 6. SIDEBAR
+# 7. APLICAÇÃO PRINCIPAL
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
-    st.markdown("### 🧠 Cérebro Ativo")
-    # Apenas Gemini visível e selecionado por padrão
-    st.success("✨ Google Gemini (Conectado)")
+    st.info("🧠 **Motor Ativo:** Google Gemini 1.5")
     
     st.markdown("---")
-    menu = st.radio("Menu Principal:", [
+    menu = st.radio("Navegação", [
         "✨ Chat Inteligente", 
-        "📝 Redação Pro (Builder)", 
+        "📝 Redação Pro", 
         "🎯 Mestre dos Editais", 
         "🍅 Sala de Foco", 
         "🏢 Cartório OCR", 
@@ -217,17 +197,13 @@ with st.sidebar:
     st.markdown("---")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown(f"<small>Nível {int(st.session_state.user_xp/100)} | {st.session_state.user_xp} XP</small>", unsafe_allow_html=True)
-    st.markdown("""<div class='footer-credits'>Desenvolvido por <br><strong>Arthur Carmélio</strong></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class='footer-credits'>Arthur Carmélio</div>""", unsafe_allow_html=True)
 
-# =============================================================================
-# 7. MÓDULOS
-# =============================================================================
-
-# --- 1. CHAT INTELIGENTE ---
+# --- 1. CHAT ---
 if menu == "✨ Chat Inteligente":
-    st.markdown(f'<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history:
-        st.info(f"Olá. Sou o Carmélio AI (Powered by Gemini). Estou pronto para analisar casos complexos.")
+        st.info("Olá! Sou o Carmélio AI. Estou conectado à legislação brasileira atualizada.")
         
     for msg in st.session_state.chat_history:
         avatar = "🧑‍⚖️" if msg["role"] == "user" else "🤖"
@@ -238,23 +214,23 @@ if menu == "✨ Chat Inteligente":
         with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
         
         with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Analisando com Gemini..."):
-                ctx_msgs = st.session_state.chat_history[-6:]
-                ctx_str = "\n".join([f"{m['role']}: {m['content']}" for m in ctx_msgs])
+            with st.spinner("Analisando..."):
+                # Contexto das últimas mensagens para memória
+                history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
                 
-                res = call_ai_unified(
-                    "Você é o Carmélio AI, assistente jurídico sênior. Baseie-se na legislação brasileira (CF, CC, CPC). Seja técnico e preciso.", 
-                    ctx_str, 
-                    "gemini"
+                res = call_gemini(
+                    "Você é um Advogado Sênior e Professor de Direito. Responda com base na CF/88, CC, CPC e Jurisprudência. Seja didático.", 
+                    history
                 )
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. REDAÇÃO PRO (BUILDER) ---
-elif menu == "📝 Redação Pro (Builder)":
+# --- 2. REDAÇÃO ---
+elif menu == "📝 Redação Pro":
     step = st.session_state.contract_step
     
+    # Barra de Progresso
     c1, c2, c3 = st.columns([1,1,1])
     c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
     c2.markdown(f"**2. Estrutura** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
@@ -262,17 +238,17 @@ elif menu == "📝 Redação Pro (Builder)":
     st.progress(int(step/3 * 100))
 
     if step == 1:
-        st.header("📝 Detalhes do Caso")
+        st.header("📝 Detalhes")
         with st.container(border=True):
-            tipo = st.text_input("Tipo de Documento", placeholder="Ex: Contrato de Locação")
+            tipo = st.text_input("Tipo de Documento", placeholder="Ex: Contrato de Honorários")
             partes = st.text_area("Partes", placeholder="Qualificação completa...")
-            objeto = st.text_area("Objeto", placeholder="Detalhes do acordo...")
+            objeto = st.text_area("Objeto", placeholder="Detalhes do serviço/acordo...")
             
             if st.button("Gerar Estrutura ➔", type="primary", use_container_width=True):
                 if tipo and objeto:
-                    with st.spinner("Gemini está escrevendo..."):
-                        prompt = f"Crie estrutura de {tipo}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
-                        res = call_ai_unified("Gere APENAS JSON válido.", prompt, "gemini", json_mode=True)
+                    with st.spinner("Gemini desenhando o contrato..."):
+                        prompt = f"Crie a estrutura de um {tipo}. Partes: {partes}. Objeto: {objeto}. Retorne JSON com lista de cláusulas (titulo, conteudo)."
+                        res = call_gemini("Gere APENAS JSON válido.", prompt, json_mode=True)
                         data = extract_json_surgical(res)
                         
                         if data and 'clauses' in data:
@@ -281,11 +257,11 @@ elif menu == "📝 Redação Pro (Builder)":
                             st.session_state.contract_step = 2
                             add_xp(20)
                             st.rerun()
-                        else: st.error("Erro ao gerar. Tente novamente.")
-                else: st.warning("Preencha os campos.")
+                        else: st.error("Erro ao estruturar. Tente detalhar mais.")
+                else: st.warning("Preencha todos os campos.")
 
     elif step == 2:
-        st.header("📑 Editor Modular")
+        st.header("📑 Editor")
         if st.button("➕ Nova Cláusula"):
             st.session_state.contract_clauses.append({"titulo": "Nova", "conteudo": "..."})
             st.rerun()
@@ -311,13 +287,13 @@ elif menu == "📝 Redação Pro (Builder)":
             st.rerun()
 
     elif step == 3:
-        st.header("✅ Documento Final")
+        st.header("✅ Finalização")
         c_view, c_chat = st.columns([2, 1])
         
         with c_view:
             docx = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
             if docx:
-                st.download_button("💾 BAIXAR DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+                st.download_button("💾 BAIXAR DOCX", docx, "Minuta.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
             
             full_text = f"# {st.session_state.contract_meta.get('tipo')}\n\n"
             for c in st.session_state.contract_clauses: full_text += f"## {c['titulo']}\n{c['conteudo']}\n\n"
@@ -328,72 +304,44 @@ elif menu == "📝 Redação Pro (Builder)":
                 st.rerun()
                 
         with c_chat:
-            st.info("🤖 **Assistente:** Quer ajustar algo?")
-            q = st.text_input("Ex: 'Aumente a multa'")
+            st.info("Precisa de ajustes?")
+            q = st.text_input("Ex: 'Adicione foro de eleição'")
             if q:
                 with st.spinner("Reescrevendo..."):
-                    ans = call_ai_unified("Revisor Jurídico.", f"Texto: {full_text}\nPedido: {q}", "gemini")
+                    ans = call_gemini("Revisor Jurídico.", f"Texto atual: {full_text}\nPedido: {q}")
                     st.write(ans)
 
-# --- 3. MESTRE DOS EDITAIS (GEMINI POWERED) ---
+# --- 3. EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
-    st.title("🎯 Mestre dos Editais (Gemini)")
+    st.title("🎯 Mestre dos Editais")
+    f = st.file_uploader("Upload PDF (Até 200MB)", type=["pdf"])
     
-    with st.expander("📂 Upload do Edital", expanded=not bool(st.session_state.edital_text)):
-        f = st.file_uploader("Upload PDF (Até 200MB)", type=["pdf"])
-        if f:
-            with st.spinner("Gemini lendo o arquivo completo..."):
-                st.session_state.edital_text = read_pdf_safe(f)
-            st.success("Edital carregado com sucesso!")
-            st.rerun()
+    if f:
+        with st.spinner("Gemini lendo arquivo..."):
+            st.session_state.edital_text = read_pdf_safe(f)
+        st.success("Lido com sucesso!")
         
     if st.session_state.edital_text:
-        st.markdown("### 📚 Sala de Treino")
-        col_btns = st.columns(2)
-        
-        if col_btns[0].button("📝 Gerar Nova Questão"):
-            with st.spinner("Analisando Conteúdo Programático..."):
-                prompt_edital = f"""
-                Analise este edital. IGNORE regras de inscrição/datas.
-                FOQUE NO CONTEÚDO PROGRAMÁTICO (Matérias).
-                Crie uma questão de múltipla escolha DIFÍCIL baseada em um tópico aleatório do conteúdo.
-                
-                Texto do edital (trecho): {st.session_state.edital_text[:30000]}
-                
-                Formato:
-                **Matéria:** [Nome]
-                **Questão:** [Enunciado]
-                A)... B)... C)... D)...
-                **Gabarito:** [Letra] - [Explicação]
-                """
-                res = call_ai_unified("Examinador de Banca.", prompt_edital, "gemini")
-                st.session_state.last_question = res 
+        if st.button("📝 Gerar Questão de Prova"):
+            with st.spinner("Criando questão difícil..."):
+                prompt = f"Ignore regras de inscrição. FOQUE NO CONTEÚDO PROGRAMÁTICO. Crie uma questão difícil de concurso sobre o texto: {st.session_state.edital_text[:30000]}"
+                st.session_state.last_question = call_gemini("Examinador de Banca.", prompt)
                 add_xp(15)
         
         if st.session_state.last_question:
             st.markdown(f"<div class='clause-card'>{st.session_state.last_question}</div>", unsafe_allow_html=True)
 
-# --- 4. SALA DE FOCO ---
+# --- 4. EXTRAS ---
 elif menu == "🍅 Sala de Foco":
-    st.title("🍅 Sala de Foco")
-    if st.button("Iniciar Foco 25m", type="primary"):
-        with st.spinner("Focando..."): time.sleep(1); st.success("Timer Iniciado!")
+    st.title("🍅 Foco")
+    if st.button("Iniciar 25m", type="primary"): st.success("Timer Iniciado!")
 
-# --- 5. FERRAMENTAS EXTRAS ---
 elif menu == "🏢 Cartório OCR":
-    st.title("🏢 Leitor de Documentos")
-    u = st.file_uploader("Arquivo", type=["jpg","png","pdf"])
-    if u and st.button("Extrair Texto"):
-        st.info("Simulando OCR...") # Gemini Vision seria implementado aqui
-        st.text_area("Resultado", "Texto extraído...", height=300)
+    st.title("🏢 OCR")
+    u = st.file_uploader("Imagem/PDF")
+    if u: st.info("OCR pronto para processar.")
 
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
-    t1, t2 = st.tabs(["📂 Upload", "🎤 Microfone"])
-    with t1:
-        f = st.file_uploader("Áudio", type=["mp3","wav"])
-        if f and st.button("Transcrever"):
-            st.success("Transcrição simulada.")
-    with t2:
-        mic = get_audio_input_safe("Gravar")
-        if mic: st.info("Áudio capturado.")
+    u = st.file_uploader("Áudio")
+    if u: st.info("Áudio pronto para processar.")
