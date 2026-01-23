@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components # Necessário para integrar sites
+import streamlit.components.v1 as components
 import os
 import json
 import base64
@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Importações seguras
+# Importações seguras (Fallback)
 try: from groq import Groq
 except ImportError: Groq = None
 
@@ -31,13 +31,15 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 2. FUNÇÕES DE COMPATIBILIDADE
+# 2. FUNÇÕES DE COMPATIBILIDADE & UTILITÁRIOS
 # =============================================================================
 
 def safe_image_show(image_path):
     if os.path.exists(image_path):
-        try: st.image(image_path, use_container_width=True)
-        except TypeError: st.image(image_path, use_column_width=True)
+        try:
+            st.image(image_path, use_container_width=True)
+        except TypeError:
+            st.image(image_path, use_column_width=True)
 
 def get_audio_input(label):
     if hasattr(st, "audio_input"):
@@ -53,19 +55,36 @@ st.markdown("""
 <style>
     .stApp { background-color: #0E1117; }
     [data-testid="stSidebar"] { background-color: #12141C; border-right: 1px solid #2B2F3B; }
+    
     .gemini-text {
         background: -webkit-linear-gradient(45deg, #4285F4, #9B72CB, #D96570);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 800; font-size: 2.2rem; margin-bottom: 10px;
     }
+    
+    .timer-display {
+        font-family: monospace; font-size: 80px; font-weight: 700;
+        color: #FFFFFF; text-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
+    }
+    .timer-container {
+        background-color: #1F2430; border-radius: 20px; padding: 20px;
+        text-align: center; border: 1px solid #2B2F3B; margin: 20px auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 500px;
+    }
+    
     .footer-credits {
         text-align: center; margin-top: 40px; padding-top: 20px;
         border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 12px;
     }
     .footer-name { color: #E5E7EB; font-weight: 700; font-size: 14px; display: block; margin-top: 5px; }
+    
     .stButton>button { border-radius: 12px; font-weight: 600; border: none; }
-    /* Ajuste para iframes ocuparem largura total */
-    iframe { width: 100% !important; }
+    .question-card { 
+        background: linear-gradient(135deg, #1F2937 0%, #111827 100%); 
+        padding: 20px; border-radius: 15px; border: 1px solid #374151; margin-bottom: 10px; 
+    }
+    
+    textarea { font-size: 1rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -115,14 +134,15 @@ def get_client():
         if not api_key: return None
         if Groq is None: return None
         return Groq(api_key=api_key)
-    except: return None
+    except:
+        return None
 
 def stream_text(text):
     for word in text.split(" "):
         yield word + " "
         time.sleep(0.02)
 
-def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, assistente jurídico.", temp=0.5):
+def call_ai(messages_or_prompt, file_bytes=None, type="text", system="Você é o Carmélio AI, assistente jurídico de elite.", temp=0.5):
     if check_rate_limit(): return None
     client = get_client()
     if not client: return "⚠️ Erro: API Key não configurada."
@@ -312,37 +332,55 @@ elif menu == "🍅 Sala de Foco":
     st.checkbox("🔄 Ciclos automáticos", key="pomo_auto_start")
     with st.expander("🎵 Rádio Lofi", expanded=False): st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
 
-# --- 4. REDAÇÃO (AGORA INTEGRADA) ---
+# --- 4. REDAÇÃO JURÍDICA (VERSÃO PRO) ---
 elif menu == "📄 Redação Jurídica":
     st.title("📄 Redação Jurídica")
     
-    # Abas para separar a IA Carmélio da Plataforma Externa
-    tab_ia, tab_ext = st.tabs(["✨ Gerador Interno (Carmélio)", "🔗 Plataforma Jurídico AI"])
+    tab_ia, tab_ext = st.tabs(["✨ Gerador Carmélio (Pro)", "🔗 Integrações Externas"])
     
-    # ABA 1: IA INTERNA (Para usar sua própria IA)
+    # GERADOR INTERNO MELHORADO COM "DICAS DA JURIDICA AI"
     with tab_ia:
-        st.info("Descreva o caso e a IA Carmélio redige a peça aqui mesmo.")
+        st.info("Descreva o caso e a IA Carmélio redige a peça com estrutura de alta qualidade (Confidencialidade, LGPD, Foro, etc).")
         c1, c2 = st.columns([1, 2])
-        tipo = c1.selectbox("Tipo", ["Petição Inicial", "Contestação", "Contrato", "Procuração", "Habeas Corpus"])
-        det = c2.text_area("Fatos e Detalhes", height=150, key="redacao_detalhes")
-        if st.button("✍️ Gerar Minuta"):
-            with st.spinner("Escrevendo..."):
-                res = call_ai(f"Redija um(a) {tipo}. Fatos: {det}. Linguagem técnica.", temp=0.2)
-                st.text_area("Minuta:", res, height=500)
+        tipo = c1.selectbox("Documento", ["Contrato de Prestação de Serviços", "Petição Inicial", "Contrato de Honorários", "Procuração Ad Judicia", "Memorando", "Notificação Extrajudicial"])
+        det = c2.text_area("Fatos e Detalhes", height=150, key="redacao_detalhes", placeholder="Ex: Contratante João (CPF X), Contratado Pedro (CNPJ Y). Objeto: Desenvolvimento de Software. Valor R$ 5k.")
+        
+        if st.button("✍️ Gerar Documento Completo"):
+            if det:
+                with st.spinner("Aplicando técnica jurídica avançada..."):
+                    # Prompt Baseado nas "Dicas da Jurídico AI" (Estrutura Completa)
+                    prompt_pro = f"""
+                    Você é um advogado sênior de um grande escritório.
+                    Redija um(a) {tipo} profissional e completo com base nestes detalhes: {det}.
+                    
+                    ESTRUTURA OBRIGATÓRIA (Siga rigorosamente):
+                    1. QUALIFICAÇÃO COMPLETA: Nome, nacionalidade, estado civil, profissão, RG, CPF, endereço. (Deixe [CAMPO] para o que faltar).
+                    2. OBJETO: Descrição detalhada e técnica.
+                    3. OBRIGAÇÕES: Liste obrigações específicas para Contratante e Contratado.
+                    4. PREÇO E PAGAMENTO: Valor, forma, prazos, multas por atraso (juros de mora 1% a.m + multa 2%).
+                    5. PRAZOS DE EXECUÇÃO: Início, fim, cronograma.
+                    6. RESCISÃO: Hipóteses de justa causa, aviso prévio, multas rescisórias.
+                    7. PROPRIEDADE INTELECTUAL: Cláusula de cessão de direitos (se aplicável).
+                    8. CONFIDENCIALIDADE: Dever de sigilo de 5 anos (padrão de mercado).
+                    9. PROTEÇÃO DE DADOS (LGPD): Cláusula de conformidade com a Lei 13.709/2018.
+                    10. FORO: Eleição de foro para dirimir controvérsias.
+                    
+                    Use linguagem formal, culta e direta. Numere as cláusulas (1., 1.1, 1.2).
+                    """
+                    res = call_ai(prompt_pro, temp=0.2)
+                    st.text_area("Minuta Final:", res, height=600)
+            else:
+                st.warning("Preencha os detalhes para gerar.")
 
-    # ABA 2: PLATAFORMA EXTERNA (O que você pediu)
+    # FERRAMENTAS EXTERNAS
     with tab_ext:
-        st.markdown("### Integração Jurídico AI")
-        st.caption("Acesse diretamente a plataforma Jurídico AI sem sair do Carmélio.")
-        
-        # Botão de segurança (caso o iframe não carregue)
-        st.link_button("🔗 Abrir Jurídico AI em Nova Aba", "https://app.juridico.ai/contrato")
-        
-        # Tenta carregar a plataforma dentro do seu app
+        st.markdown("### Jurídico AI & Outros")
+        st.caption("Acesse plataformas parceiras diretamente.")
+        st.link_button("🔗 Abrir Jurídico AI (Contratos)", "https://app.juridico.ai/contrato")
         try:
             components.iframe("https://app.juridico.ai/contrato", height=800, scrolling=True)
-        except Exception:
-            st.error("A plataforma externa não permitiu o carregamento aqui. Use o botão acima.")
+        except:
+            st.error("Visualização bloqueada pelo site. Use o botão acima.")
 
 # --- 5. OCR ---
 elif menu == "🏢 Cartório OCR":
@@ -354,7 +392,7 @@ elif menu == "🏢 Cartório OCR":
             res = call_ai("Transcreva fielmente.", file_bytes=u.getvalue(), type="vision")
             st.text_area("Texto:", res, height=400)
 
-# --- 6. TRANSCRIÇÃO (HÍBRIDA) ---
+# --- 6. TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
     
@@ -372,7 +410,6 @@ elif menu == "🎙️ Transcrição":
 
     with tab_mic:
         st.info("Ideal para ditados rápidos.")
-        # Verificação de segurança
         if hasattr(st, "audio_input"):
             audio_mic = st.audio_input("Clique para gravar")
             if audio_mic:
@@ -381,4 +418,4 @@ elif menu == "🎙️ Transcrição":
                     st.success("Transcrição Concluída:")
                     st.text_area("Resultado (Mic):", res, height=300)
         else:
-            st.warning("⚠️ Seu sistema não suporta gravação direta no navegador. Por favor, use a aba 'Upload de Arquivo'.")
+            st.warning("⚠️ Seu sistema não suporta gravação direta. Use a aba Upload.")
