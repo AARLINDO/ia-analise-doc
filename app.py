@@ -172,10 +172,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
     if not model: return f"Erro: {name}"
     try:
         if image:
-            # Modo Visão (OCR)
             response = model.generate_content([system_prompt, image, user_prompt])
         else:
-            # Modo Texto
             full_prompt = f"SYS: {system_prompt}\nUSER: {user_prompt}"
             if json_mode: full_prompt += "\nOutput JSON only."
             response = model.generate_content(full_prompt)
@@ -201,6 +199,18 @@ def read_pdf_safe(file_obj):
         return text if text.strip() else None
     except: return None
 
+# --- FÁBRICA DE DOCX GENÉRICA ---
+def create_generic_docx(content, title="Documento Carmélio AI"):
+    if not docx: return None
+    doc = Document()
+    doc.add_heading(title, 0)
+    for line in content.split('\n'):
+        if line.strip(): doc.add_paragraph(line.strip())
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 def create_contract_docx(clauses, meta):
     if not docx: return None
     doc = Document()
@@ -212,7 +222,6 @@ def create_contract_docx(clauses, meta):
     doc.add_paragraph(meta.get('objeto', ''))
     for clause in clauses:
         doc.add_heading(clause.get('titulo', 'Cláusula'), level=1)
-        # Simples conversão de quebra de linha
         for line in clause.get('conteudo', '').split('\n'):
             if line.strip(): doc.add_paragraph(line.strip())
     buffer = BytesIO()
@@ -258,6 +267,7 @@ if "edital_filename" not in st.session_state: st.session_state.edital_filename =
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = None
 if "quiz_show_answer" not in st.session_state: st.session_state.quiz_show_answer = False
 if "user_choice" not in st.session_state: st.session_state.user_choice = None
+if "ocr_text" not in st.session_state: st.session_state.ocr_text = ""
 
 def add_xp(amount):
     st.session_state.user_xp += amount
@@ -268,8 +278,7 @@ def add_xp(amount):
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
-    
-    render_sidebar_widgets() # TIMER + MÚSICA
+    render_sidebar_widgets()
     st.markdown("---")
     
     model_obj, status_msg = get_best_model()
@@ -286,8 +295,6 @@ with st.sidebar:
     
     st.markdown("---")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
-    
-    # RODAPÉ ATUALIZADO 2026
     st.markdown("""
     <div class='footer-credits'>
         Desenvolvido por<br>
@@ -300,24 +307,16 @@ with st.sidebar:
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
-        st.markdown("""
-        <div class="onboarding-box">
-            <h4>👋 Olá, Arthur!</h4>
-            <p>Sou seu <b>Mentor Jurídico</b> pessoal. Posso te ajudar com dúvidas de leis, 
-            pesquisas de jurisprudência ou apenas conversar sobre seus estudos.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência?</p></div>""", unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
-        avatar = "🧑‍⚖️" if msg["role"] == "user" else "🤖"
-        with st.chat_message(msg["role"], avatar=avatar): st.markdown(msg["content"])
-    if p := st.chat_input("Digite sua dúvida..."):
+        with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
+    if p := st.chat_input("Digite..."):
         st.session_state.chat_history.append({"role": "user", "content": p})
         with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
         with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Analisando..."):
+            with st.spinner("..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                res = call_gemini("Advogado Sênior. Responda em Português do Brasil.", history)
+                res = call_gemini("Advogado Sênior.", history)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
@@ -328,13 +327,7 @@ elif menu == "📝 Gere seu Contrato":
     step = st.session_state.contract_step
     
     if step == 1:
-        st.markdown("""
-        <div class="onboarding-box">
-            <b>Crie minutas perfeitas em segundos.</b><br>
-            Selecione o tipo, informe as partes e deixe a IA redigir as cláusulas baseadas na lei.
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("""<div class="onboarding-box"><b>Crie minutas perfeitas.</b><br>Escolha o tipo, informe as partes e a IA redige.</div>""", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1,1,1])
     c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
     c2.markdown(f"**2. Minuta** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
@@ -344,11 +337,11 @@ elif menu == "📝 Gere seu Contrato":
     if step == 1:
         with st.container(border=True):
             tipo = st.selectbox("Modelo:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Compra e Venda Veículo", "Outro"])
-            partes = st.text_area("Partes (Contratante/Contratado)")
-            objeto = st.text_area("Objeto (O que está sendo negociado?)")
+            partes = st.text_area("Partes")
+            objeto = st.text_area("Objeto")
             if st.button("Gerar Minuta ➔", type="primary", use_container_width=True):
                 if partes and objeto:
-                    with st.spinner("Redigindo cláusulas..."):
+                    with st.spinner("Redigindo..."):
                         lei = "Lei do Inquilinato" if "Locação" in tipo else "Código Civil"
                         prompt = f"Crie contrato de {tipo}. Base: {lei}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
                         res = call_gemini("JSON only.", prompt, json_mode=True)
@@ -359,7 +352,7 @@ elif menu == "📝 Gere seu Contrato":
                             st.session_state.contract_step = 2
                             add_xp(25)
                             st.rerun()
-                        else: st.error("Erro ao gerar minuta.")
+                        else: st.error("Erro.")
     elif step == 2:
         st.header("📑 Revisão"); 
         if st.button("➕ Cláusula"): st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."}); st.rerun()
@@ -385,17 +378,12 @@ elif menu == "📝 Gere seu Contrato":
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
-    # ONBOARDING MESTRE
     if not st.session_state.edital_text:
         st.markdown("""
         <div class="onboarding-box">
             <h4>🚀 Professor de Edital</h4>
-            <p>Transforme aquele PDF gigante em um simulador de prova.</p>
-            <ul>
-                <li><b>Carregue:</b> Faça upload do edital.</li>
-                <li><b>Treine:</b> A IA gera questões técnicas baseadas no conteúdo.</li>
-                <li><b>Aprenda:</b> Receba correções com explicação detalhada.</li>
-            </ul>
+            <p>Transforme PDF em simulador de prova.</p>
+            <ul><li>Carregue o Edital > Gere questões técnicas > Aprenda.</li></ul>
         </div>
         """, unsafe_allow_html=True)
 
@@ -416,7 +404,7 @@ elif menu == "🎯 Mestre dos Editais":
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto (imagem).")
+                else: st.error("PDF sem texto.")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -449,57 +437,56 @@ elif menu == "🎯 Mestre dos Editais":
                 if u==c: st.success("Acertou!"); add_xp(50)
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
+                
+                # BOTÃO DE DOWNLOAD DA QUESTÃO
+                q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
+                docx_q = create_generic_docx(q_text, "Questão de Concurso")
+                st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
                 if st.button("➡️ Próxima", type="primary"): gerar_turbo(diff, foco); st.rerun()
 
-# --- 4. CARTÓRIO OCR (EXPLICATIVO) ---
+# --- 4. CARTÓRIO OCR ---
 elif menu == "🏢 Cartório OCR":
     st.title("🏢 Cartório OCR (Digitalizador)")
-    
     st.markdown("""
     <div class="onboarding-box">
         <h4>📸 Do Papel para o Digital</h4>
-        <p>Ferramenta essencial para digitalizar livros de registro antigos e manuscritos.</p>
+        <p>Ideal para digitalizar livros antigos de registro.</p>
         <ul>
-            <li><b>O que é OCR?</b> Reconhecimento Óptico de Caracteres. A IA "lê" a imagem.</li>
-            <li><b>Como usar:</b> Tire uma foto da página do livro (Registro de Nascimento, Casamento, etc) e envie aqui.</li>
-            <li><b>Resultado:</b> Receba o texto digitado pronto para copiar na <b>Certidão de Inteiro Teor</b>.</li>
+            <li><b>Envie:</b> Foto da página do livro.</li>
+            <li><b>Receba:</b> Texto transcrito pronto para Certidão de Inteiro Teor.</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
     
-    img_file = st.file_uploader("Envie a foto do Livro/Documento", type=["png", "jpg", "jpeg"])
+    img_file = st.file_uploader("Foto do Livro/Documento", type=["png", "jpg", "jpeg"])
     if img_file:
-        try:
-            image = Image.open(img_file)
-            st.image(image, caption="Imagem Carregada", use_container_width=True)
-            if st.button("🔍 Extrair Texto (Inteiro Teor)", type="primary"):
-                with st.spinner("A IA está lendo o documento..."):
-                    res = call_gemini("Você é um especialista em OCR de cartório. Transcreva TODO o texto desta imagem com precisão total, mantendo nomes, datas e grafias originais.", "Transcreva esta imagem.", image=image)
-                    st.text_area("Texto Extraído:", res, height=400)
-                    add_xp(30)
-        except Exception as e: st.error(f"Erro na imagem: {e}")
+        image = Image.open(img_file)
+        st.image(image, caption="Imagem Carregada", use_container_width=True)
+        if st.button("🔍 Extrair Texto", type="primary"):
+            with st.spinner("Lendo documento..."):
+                res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o texto com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
+                st.session_state.ocr_text = res
+                add_xp(30)
+    
+    if st.session_state.ocr_text:
+        st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
+        # BOTÃO DE DOWNLOAD OCR
+        docx_ocr = create_generic_docx(st.session_state.ocr_text, "Transcrição de Livro")
+        st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
-# --- 5. TRANSCRIÇÃO (EXPLICATIVO) ---
+# --- 5. TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição de Áudio")
+    st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto</h4><p>Transcreva audiências e ditações.</p></div>""", unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class="onboarding-box">
-        <h4>🗣️ Voz para Texto</h4>
-        <p>Ideal para audiências, reuniões, ditações ou notas de voz.</p>
-        <ul>
-            <li><b>Envie:</b> Arquivos de áudio (mp3, wav, m4a).</li>
-            <li><b>Receba:</b> A transcrição completa e pontuada do que foi falado.</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    audio_file = st.file_uploader("Envie o arquivo de Áudio", type=["mp3", "wav", "m4a", "ogg"])
+    audio_file = st.file_uploader("Arquivo de Áudio", type=["mp3", "wav", "m4a"])
     if audio_file:
         st.audio(audio_file)
-        if st.button("📝 Transcrever Agora", type="primary"):
-            with st.spinner("Ouvindo e transcrevendo... (Isso pode levar alguns segundos)"):
-                # Simulação de processamento de áudio (o Gemini API Python direto aceita arquivos via File API, 
-                # mas aqui simplificamos a interface. Em prod, usaríamos genai.upload_file)
-                st.info("ℹ️ Para transcrição de arquivos de áudio reais, a IA precisa processar o arquivo na nuvem. (Funcionalidade demonstrativa nesta versão Local).")
-                st.write("Em um app real, o texto apareceria aqui.")
+        if st.button("📝 Transcrever", type="primary"):
+            with st.spinner("Processando..."):
+                st.info("Funcionalidade demonstrativa (Requer processamento em nuvem pago).")
+                texto_demo = "Esta é uma transcrição simulada do áudio enviado.\nEm um ambiente de produção real, o áudio seria processado pela API."
+                st.text_area("Resultado:", texto_demo, height=200)
+                docx_audio = create_generic_docx(texto_demo, "Transcrição de Áudio")
+                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
