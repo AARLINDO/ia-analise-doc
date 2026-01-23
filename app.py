@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import json
 import time
@@ -10,7 +11,7 @@ from io import BytesIO
 # 1. CONFIGURAÇÃO
 # =============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Turbo",
+    page_title="Carmélio AI | Student Flow",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -40,7 +41,110 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 3. FUNÇÕES UTILITÁRIAS
+# 3. POMODORO FLUTUANTE (JAVASCRIPT PURO)
+# =============================================================================
+def render_sidebar_pomodoro():
+    """
+    Renderiza um timer que NÃO trava o Python e continua rodando
+    enquanto o usuário navega ou responde questões.
+    """
+    pomodoro_html = """
+    <style>
+        .timer-box {
+            background-color: #1F2430; border: 1px solid #374151;
+            border-radius: 10px; padding: 15px; text-align: center;
+            color: white; font-family: sans-serif; margin-bottom: 20px;
+        }
+        .time-display {
+            font-size: 32px; font-weight: bold; margin: 10px 0;
+            color: #4285F4;
+        }
+        .btn-pomo {
+            background: #2563EB; color: white; border: none;
+            padding: 5px 10px; border-radius: 5px; cursor: pointer;
+            margin: 2px; font-size: 12px;
+        }
+        .btn-stop { background: #DC2626; }
+        .btn-pause { background: #D97706; }
+        .presets { font-size: 10px; color: #aaa; margin-bottom: 5px; }
+    </style>
+    
+    <div class="timer-box">
+        <div style="font-size: 14px; font-weight: bold;">🍅 Foco Contínuo</div>
+        <div class="time-display" id="timer">25:00</div>
+        
+        <div class="presets">
+            <button class="btn-pomo" onclick="setTime(25)">25m</button>
+            <button class="btn-pomo" onclick="setTime(50)">50m</button>
+            <button class="btn-pomo" onclick="setTime(5)">5m</button>
+        </div>
+
+        <div>
+            <button class="btn-pomo" onclick="startTimer()">▶</button>
+            <button class="btn-pomo btn-pause" onclick="pauseTimer()">❚❚</button>
+            <button class="btn-pomo btn-stop" onclick="resetTimer()">↻</button>
+        </div>
+        <div id="status" style="font-size:12px; margin-top:5px; color:#aaa;">Pronto</div>
+    </div>
+
+    <script>
+        let time = 25 * 60;
+        let initialTime = 25 * 60;
+        let interval = null;
+        let isRunning = false;
+
+        function updateDisplay() {
+            let m = Math.floor(time / 60);
+            let s = time % 60;
+            document.getElementById('timer').innerText = 
+                (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        function setTime(mins) {
+            pauseTimer();
+            time = mins * 60;
+            initialTime = time;
+            updateDisplay();
+            document.getElementById('status').innerText = mins + " min definido";
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('status').innerText = "Focando...";
+            interval = setInterval(() => {
+                if (time > 0) {
+                    time--;
+                    updateDisplay();
+                } else {
+                    clearInterval(interval);
+                    isRunning = false;
+                    document.getElementById('timer').innerText = "00:00";
+                    document.getElementById('status').innerText = "⏰ Acabou!";
+                    // Toca um beep simples
+                    new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            clearInterval(interval);
+            isRunning = false;
+            document.getElementById('status').innerText = "Pausado";
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            time = initialTime;
+            updateDisplay();
+            document.getElementById('status').innerText = "Reiniciado";
+        }
+    </script>
+    """
+    components.html(pomodoro_html, height=180)
+
+# =============================================================================
+# 4. FUNÇÕES UTILITÁRIAS
 # =============================================================================
 def safe_image_show(image_path):
     if os.path.exists(image_path):
@@ -51,14 +155,13 @@ def safe_image_show(image_path):
 def check_rate_limit():
     if "last_call" not in st.session_state: st.session_state.last_call = 0
     now = time.time()
-    # Reduzi o delay de segurança para ser mais rápido
     if now - st.session_state.last_call < 0.5: return True 
     return False
 
 def mark_call(): st.session_state.last_call = time.time()
 
 # =============================================================================
-# 4. MOTOR DE IA (TURBO)
+# 5. MOTOR DE IA
 # =============================================================================
 @st.cache_resource
 def get_best_model():
@@ -68,22 +171,17 @@ def get_best_model():
 
     try:
         genai.configure(api_key=api_key)
-        
-        # Tenta pegar o modelo
         try:
             models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except:
             return None, "Erro de Chave API"
 
-        # Prioridade para o Flash (Mais Rápido)
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         escolhido = next((m for m in pref if m in models), models[0] if models else None)
         
         if escolhido:
             return genai.GenerativeModel(escolhido.replace("models/", "")), escolhido.replace("models/", "")
-            
         return None, "Nenhum modelo compatível."
-
     except Exception as e:
         return None, f"Erro Fatal: {str(e)}"
 
@@ -95,10 +193,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False):
     if not model: return f"Erro de Conexão: {model_name}"
     
     try:
-        # Prompt enxuto para ganhar velocidade
         full_prompt = f"SYS: {system_prompt}\nUSER: {user_prompt}"
         if json_mode: full_prompt += "\nOutput JSON only."
-            
         response = model.generate_content(full_prompt)
         return response.text
     except Exception as e:
@@ -112,9 +208,6 @@ def extract_json_surgical(text):
     except: pass
     return None
 
-# =============================================================================
-# 5. ARQUIVOS
-# =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
@@ -156,7 +249,7 @@ def create_contract_docx(clauses, meta):
     return buffer
 
 # =============================================================================
-# 6. UI
+# 6. INTERFACE & CSS
 # =============================================================================
 st.markdown("""
 <style>
@@ -202,16 +295,21 @@ def add_xp(amount):
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
+    # -----------------------------------------------
+    # NOVO: POMODORO FLUTUANTE (VISÍVEL SEMPRE)
+    # -----------------------------------------------
+    render_sidebar_pomodoro()
+    st.markdown("---")
+    # -----------------------------------------------
+
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
     else: st.success(f"🟢 **{status_msg}**")
         
-    st.markdown("---")
     menu = st.radio("Navegação", [
         "✨ Chat Inteligente", 
         "📝 Gere seu Contrato", 
         "🎯 Mestre dos Editais", 
-        "🍅 Sala de Foco", 
         "🏢 Cartório OCR", 
         "🎙️ Transcrição"
     ], label_visibility="collapsed")
@@ -224,11 +322,9 @@ with st.sidebar:
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: st.info(f"Olá. Sou o Carmélio AI.")
-        
     for msg in st.session_state.chat_history:
         avatar = "🧑‍⚖️" if msg["role"] == "user" else "🤖"
         with st.chat_message(msg["role"], avatar=avatar): st.markdown(msg["content"])
-        
     if p := st.chat_input("Dúvida..."):
         st.session_state.chat_history.append({"role": "user", "content": p})
         with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
@@ -240,7 +336,7 @@ if menu == "✨ Chat Inteligente":
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. GERE SEU CONTRATO ---
+# --- 2. CONTRATO ---
 elif menu == "📝 Gere seu Contrato":
     step = st.session_state.contract_step
     c1, c2, c3 = st.columns([1,1,1])
@@ -252,12 +348,9 @@ elif menu == "📝 Gere seu Contrato":
     if step == 1:
         st.header("📝 Qual contrato?")
         with st.container(border=True):
-            tipo_contrato = st.selectbox("Modelo:", [
-                "Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Compra e Venda Veículo", "Outro"
-            ])
+            tipo_contrato = st.selectbox("Modelo:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Compra e Venda Veículo", "Outro"])
             partes = st.text_area("Partes")
             objeto = st.text_area("Objeto")
-            
             if st.button("Gerar Minuta ➔", type="primary", use_container_width=True):
                 if partes and objeto:
                     with st.spinner("Gerando..."):
@@ -293,38 +386,48 @@ elif menu == "📝 Gere seu Contrato":
         if docx: st.download_button("💾 Baixar", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
         if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
 
-# --- 3. MESTRE DOS EDITAIS (MODO TURBO) ---
+# --- 3. MESTRE DOS EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
-    st.title("🎯 Mestre dos Editais (Turbo)")
+    st.title("🎯 Mestre dos Editais")
     
-    # Função Otimizada (Geração Direta)
+    # 1. TEXTO DE BOAS-VINDAS (RESTAURADO)
+    if not st.session_state.edital_text:
+        st.markdown("""
+        ### 🚀 Seu Professor Particular de Concursos
+        Bem-vindo ao Mestre dos Editais. Esta ferramenta transforma aquele PDF chato em um **Simulador de Prova**.
+        
+        **Para que serve?**
+        * **Estudar:** Gera questões inéditas focadas no seu edital.
+        * **Treinar:** Simula o ambiente de prova (sem saber a resposta antes).
+        * **Aprender:** A IA corrige e explica o porquê de cada erro.
+        
+        **Como usar?**
+        1. Clique abaixo em "Carregar PDF" e envie seu edital.
+        2. Escolha a dificuldade e o tema.
+        3. Responda as questões e suba de nível!
+        """)
+        
     def gerar_turbo(dificuldade, foco):
         st.session_state.quiz_data = None
         st.session_state.quiz_show_answer = False
         st.session_state.user_choice = None
-        
         with st.spinner(f"⚡ Gerando questão rápida ({dificuldade})..."):
             tema = f"FOCO: {foco}." if foco else "Tema aleatório do CONTEÚDO."
-            # Limitamos a 15k chars para ser MUITO rápido
             texto_reduzido = st.session_state.edital_text[:15000]
-            
             prompt = f"""
             Role: Banca Examinadora. Task: Criar questão técnica baseada no edital.
             IGNORE: Datas, regras admin. USE: Conteúdo Programático/Leis.
             {tema} Nível: {dificuldade}.
             JSON Output: {{"materia": "...", "enunciado": "...", "alternativas": {{"A":"...","B":"...","C":"...","D":"..."}}, "correta": "A", "explicacao": "..."}}
             """
-            
             res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{texto_reduzido}", json_mode=True)
             data = extract_json_surgical(res)
-            
             if data: st.session_state.quiz_data = data
             else: st.error("Erro rápido. Tente de novo.")
 
     # UPLOAD
     if not st.session_state.edital_text:
-        st.markdown("### 🚀 Professor de Edital")
-        f = st.file_uploader("PDF", type=["pdf"])
+        f = st.file_uploader("Carregar Edital (PDF)", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
@@ -347,7 +450,6 @@ elif menu == "🎯 Mestre dos Editais":
             foco = st.text_input("Foco:", placeholder="Ex: Penal")
         with ca:
             st.write(""); st.write("")
-            # AQUI ESTÁ A MÁGICA: Gera direto, sem flag de auto_generate
             if st.button("🔥 GERAR", type="primary", use_container_width=True):
                 gerar_turbo(diff, foco)
                 st.rerun()
@@ -374,18 +476,10 @@ elif menu == "🎯 Mestre dos Editais":
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
                 
-                # BOTÃO TURBO: Gera a próxima na hora
                 if st.button("➡️ Próxima Rápida", type="primary"):
                     gerar_turbo(diff, foco)
                     st.rerun()
 
 # --- 4. EXTRAS ---
-elif menu == "🍅 Sala de Foco":
-    st.title("🍅 Sala de Foco")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("▶️ Iniciar 25m"): st.success("Focando...")
-    with c2: st.video("https://www.youtube.com/watch?v=jfKfPfyJRdk")
-
 elif menu == "🏢 Cartório OCR": st.title("🏢 OCR"); st.file_uploader("Arquivo")
 elif menu == "🎙️ Transcrição": st.title("🎙️ Transcrição"); st.file_uploader("Áudio")
