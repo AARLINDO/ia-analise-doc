@@ -70,13 +70,13 @@ def get_best_model():
     try:
         genai.configure(api_key=api_key)
         
-        # Lista modelos disponíveis para sua conta
+        # Tenta listar modelos
         try:
             models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except:
             return None, "Erro de Chave API"
 
-        # Ordem de preferência (Flash é melhor para documentos longos)
+        # Ordem de preferência
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         
         escolhido = None
@@ -189,7 +189,7 @@ if "contract_meta" not in st.session_state: st.session_state.contract_meta = {}
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
 
-# Estados do Quiz Interativo
+# Estados do Quiz
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = None
 if "quiz_show_answer" not in st.session_state: st.session_state.quiz_show_answer = False
 if "user_choice" not in st.session_state: st.session_state.user_choice = None
@@ -204,7 +204,6 @@ def add_xp(amount):
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
-    # Diagnóstico Visual
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
     else: st.success(f"🟢 **{status_msg}**")
@@ -244,7 +243,7 @@ if menu == "✨ Chat Inteligente":
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. GERE SEU CONTRATO (ESPECIALIZADO) ---
+# --- 2. GERE SEU CONTRATO ---
 elif menu == "📝 Gere seu Contrato":
     step = st.session_state.contract_step
     
@@ -265,7 +264,6 @@ elif menu == "📝 Gere seu Contrato":
                 "Outro (Personalizado)"
             ])
             st.info(f"💡 A IA usará a legislação específica para **{tipo_contrato}**.")
-            
             partes = st.text_area("Quem são as Partes?", placeholder="Ex: Contratante: João... Contratado: Empresa X...")
             objeto = st.text_area("Detalhes do Negócio", placeholder="Ex: Venda de um Fiat Uno... ou Aluguel na Rua X...")
             
@@ -274,7 +272,6 @@ elif menu == "📝 Gere seu Contrato":
                     with st.spinner(f"Consultando legislação para {tipo_contrato}..."):
                         lei_base = "Código Civil"
                         if "Locação" in tipo_contrato: lei_base = "Lei do Inquilinato (Lei 8.245/91)"
-                        
                         prompt = f"""
                         Atue como Especialista em Contratos. Crie minuta de: {tipo_contrato}.
                         Base legal: {lei_base}. Partes: {partes}. Objeto: {objeto}.
@@ -331,46 +328,48 @@ elif menu == "📝 Gere seu Contrato":
                     ans = call_gemini("Revisor.", f"Texto: {full_text}\nPedido: {q}")
                     st.write(ans)
 
-# --- 3. MESTRE DOS EDITAIS (VERSÃO PLATAFORMA DE TREINO) ---
+# --- 3. MESTRE DOS EDITAIS (AGORA INTERATIVO E CORRIGIDO) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
     # 1. Onboarding
     if not st.session_state.edital_text:
         st.markdown("""
-        ### 🚀 Transforme seu Edital em um Professor Particular
-        **Como funciona:**
-        1. Faça upload do seu Edital (PDF).
-        2. A IA vai ler todo o conteúdo programático.
-        3. Você escolhe o nível e gera questões inéditas.
+        ### 🚀 Transforme seu Edital em um Professor
+        **Passo a passo:**
+        1. Faça upload do Edital (PDF).
+        2. O sistema vai ler as matérias.
+        3. Você gera questões e treina como se estivesse na prova.
         """)
     
-    # 2. Upload
+    # 2. Área de Upload (Expander)
     with st.expander("📂 Carregar/Trocar Edital", expanded=not bool(st.session_state.edital_text)):
-        f = st.file_uploader("Upload do PDF do Edital", type=["pdf"])
+        f = st.file_uploader("Upload do PDF", type=["pdf"])
         if f:
-            with st.spinner("Lendo e mapeando conteúdo programático..."):
+            with st.spinner("Lendo conteúdo programático..."):
                 st.session_state.edital_text = read_pdf_safe(f)
                 st.session_state.quiz_data = None 
                 st.session_state.quiz_show_answer = False
-            st.success("Edital mapeado! Pode fechar esta aba.")
+            st.success("Edital carregado! Pode fechar esta aba.")
             st.rerun()
 
-    # 3. Área de Treino
+    # 3. Área de Treino (Visível apenas se tiver edital)
     if st.session_state.edital_text:
         st.markdown("---")
         
+        # Configuração do Treino
         col_config, col_action = st.columns([2, 1])
         with col_config:
             dificuldade = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
-            foco = st.text_input("Focar em tema específico? (Opcional)", placeholder="Ex: Crase, Direito Penal...")
+            foco = st.text_input("Focar em tema específico? (Opcional)", placeholder="Ex: Direito Penal, Crase...")
         
         with col_action:
             st.write("") 
             st.write("") 
-            if st.button("🔥 GERAR DESAFIO", type="primary", use_container_width=True):
+            if st.button("🔥 GERAR QUESTÃO", type="primary", use_container_width=True):
                 with st.spinner(f"Elaborando questão ({dificuldade})..."):
                     tema_prompt = f"sobre o tema '{foco}'" if foco else "sobre um tema aleatório do conteúdo"
+                    
                     prompt = f"""
                     Aja como Banca Examinadora. Analise o edital.
                     Crie questão múltipla escolha {dificuldade} {tema_prompt}.
@@ -378,7 +377,7 @@ elif menu == "🎯 Mestre dos Editais":
                     
                     REGRAS:
                     1. Gere 4 alternativas (A, B, C, D).
-                    2. Forneça explicação detalhada.
+                    2. Forneça explicação detalhada no final.
                     
                     SAÍDA JSON:
                     {{
@@ -391,39 +390,58 @@ elif menu == "🎯 Mestre dos Editais":
                     """
                     res = call_gemini("Gere APENAS JSON válido.", prompt, json_mode=True)
                     data = extract_json_surgical(res)
+                    
                     if data:
                         st.session_state.quiz_data = data
                         st.session_state.quiz_show_answer = False
-                    else: st.error("Erro ao criar questão.")
+                        st.rerun()
+                    else:
+                        st.error("Erro ao criar questão. Tente novamente.")
 
-        # 4. Quiz Interativo
+        # 4. Exibição da Questão (Quiz)
         if st.session_state.quiz_data:
             q = st.session_state.quiz_data
             st.markdown(f"### 📚 Matéria: {q.get('materia', 'Geral')}")
-            st.markdown(f"""<div style="background:#1F2430;padding:20px;border-radius:10px;"><b>{q['enunciado']}</b></div>""", unsafe_allow_html=True)
-            st.write("")
+            
+            # Enunciado
+            st.markdown(f"""
+            <div style="background:#1F2430;padding:20px;border-radius:10px;border:1px solid #374151;margin-bottom:20px;">
+                <b style="font-size:1.1rem;">{q['enunciado']}</b>
+            </div>
+            """, unsafe_allow_html=True)
             
             opts = q['alternativas']
+            
+            # Modo Pergunta
             if not st.session_state.quiz_show_answer:
-                st.info("🤔 Qual a correta?")
+                st.info("🤔 Escolha a alternativa correta:")
                 c1, c2 = st.columns(2)
-                if c1.button(f"A) {opts['A']}", use_container_width=True): st.session_state.user_choice = "A"; st.session_state.quiz_show_answer = True; st.rerun()
-                if c2.button(f"B) {opts['B']}", use_container_width=True): st.session_state.user_choice = "B"; st.session_state.quiz_show_answer = True; st.rerun()
-                if c1.button(f"C) {opts['C']}", use_container_width=True): st.session_state.user_choice = "C"; st.session_state.quiz_show_answer = True; st.rerun()
-                if c2.button(f"D) {opts['D']}", use_container_width=True): st.session_state.user_choice = "D"; st.session_state.quiz_show_answer = True; st.rerun()
+                if c1.button(f"A) {opts['A']}", use_container_width=True): 
+                    st.session_state.user_choice = "A"; st.session_state.quiz_show_answer = True; st.rerun()
+                if c2.button(f"B) {opts['B']}", use_container_width=True): 
+                    st.session_state.user_choice = "B"; st.session_state.quiz_show_answer = True; st.rerun()
+                if c1.button(f"C) {opts['C']}", use_container_width=True): 
+                    st.session_state.user_choice = "C"; st.session_state.quiz_show_answer = True; st.rerun()
+                if c2.button(f"D) {opts['D']}", use_container_width=True): 
+                    st.session_state.user_choice = "D"; st.session_state.quiz_show_answer = True; st.rerun()
+            
+            # Modo Resposta
             else:
                 user = st.session_state.user_choice
                 correct = q['correta']
                 
+                # Mostra alternativas com marcação
                 for l, t in opts.items():
-                    prefix = "✅" if l == correct else ("❌" if l == user and l != correct else "⬜")
+                    prefix = "⬜"
+                    if l == correct: prefix = "✅"
+                    elif l == user and l != correct: prefix = "❌"
                     st.markdown(f"**{prefix} {l})** {t}")
 
                 st.markdown("---")
                 if user == correct: 
-                    st.success("🎉 Correto!"); add_xp(50)
+                    st.success("🎉 **PARABÉNS!** Resposta Correta!"); add_xp(50)
                 else: 
-                    st.error(f"⚠️ Incorreto. A certa é {correct}.")
+                    st.error(f"⚠️ **Incorreto.** Você marcou {user}, mas a certa é {correct}.")
                 
                 with st.expander("📖 Gabarito Comentado", expanded=True):
                     st.markdown(q['explicacao'])
@@ -455,7 +473,4 @@ elif menu == "🍅 Sala de Foco":
 
 # --- 5. EXTRAS ---
 elif menu == "🏢 Cartório OCR":
-    st.title("🏢 OCR"); st.file_uploader("Arquivo")
-
-elif menu == "🎙️ Transcrição":
-    st.title("🎙️ Transcrição"); st.file_uploader("Áudio")
+    st.title("🏢 OCR"); st.file
