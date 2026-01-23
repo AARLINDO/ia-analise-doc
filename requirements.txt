@@ -4,3 +4,4 @@ python-docx
 pdfplumber
 Pillow
 google-generativeai
+gemini-1.5-flash
