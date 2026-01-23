@@ -35,7 +35,7 @@ except ImportError:
 try: from PIL import Image
 except ImportError: Image = None
 
-# Mantivemos Groq/OpenAI apenas como fallback caso você queira no futuro
+# Mantivemos Groq/OpenAI apenas como fallback
 try: from groq import Groq
 except ImportError: Groq = None
 try: from openai import OpenAI
@@ -63,16 +63,20 @@ def check_rate_limit():
 
 def mark_call(): st.session_state.last_call = time.time()
 
-# --- CÉREBRO GEMINI ---
+# --- CÉREBRO GEMINI (CORRIGIDO PARA EVITAR ERRO 404) ---
 def get_ai_clients():
     clients = {"gemini": None, "groq": None, "openai": None}
     
-    # Prioridade total ao Gemini
+    # Tenta pegar a chave do Google
     gemini_key = st.secrets.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    
     if gemini_key and genai: 
-        genai.configure(api_key=gemini_key)
-        # Usando o modelo Flash que é rápido e tem contexto gigante
-        clients["gemini"] = genai.GenerativeModel('gemini-1.5-flash')
+        try:
+            genai.configure(api_key=gemini_key)
+            # ALTERADO DE 'gemini-1.5-flash' PARA 'gemini-pro' (MAIS ESTÁVEL)
+            clients["gemini"] = genai.GenerativeModel('gemini-pro')
+        except Exception as e:
+            st.error(f"Erro ao conectar no Gemini: {e}")
         
     return clients
 
@@ -85,7 +89,7 @@ def call_ai_unified(system_prompt, user_prompt, provider="gemini", json_mode=Fal
     try:
         # GEMINI (PADRÃO)
         if provider == "gemini":
-            if not clients["gemini"]: return "⚠️ Erro: Chave Google (Gemini) não configurada."
+            if not clients["gemini"]: return "⚠️ Erro: Chave Google (Gemini) não configurada ou inválida."
             
             # Gemini prefere prompt único
             full_prompt = f"INSTRUÇÃO DO SISTEMA: {system_prompt}\n\nUSUÁRIO: {user_prompt}"
