@@ -11,7 +11,7 @@ from io import BytesIO
 # 1. CONFIGURAÇÃO
 # =============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Pro Studio",
+    page_title="Carmélio AI | Ultimate Studio",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -41,59 +41,83 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 3. WIDGETS DE FOCO (SIDEBAR)
+# 3. WIDGETS DE FOCO (POMODORO + MUSIC PLAYER PRO)
 # =============================================================================
 def render_sidebar_widgets():
     """
-    Renderiza Timer + Spotify + Créditos na Sidebar.
-    O Timer usa JavaScript para não travar o Python.
+    Renderiza um Painel de Controle Completo (Timer + Música)
+    usando HTML/JS para funcionar independente do Python.
     """
     
-    # --- 1. TIMER POMODORO (Com Alerta Sonoro) ---
-    pomodoro_html = """
+    sidebar_html = """
     <style>
-        .timer-box {
+        .widget-box {
             background-color: #1F2430; border: 1px solid #374151;
-            border-radius: 8px; padding: 10px; text-align: center;
-            color: white; font-family: sans-serif; margin-bottom: 10px;
+            border-radius: 12px; padding: 15px; text-align: center;
+            color: white; font-family: sans-serif; margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        .time-display {
-            font-size: 28px; font-weight: bold; margin: 5px 0;
-            color: #4285F4;
-        }
-        .btn-pomo {
-            background: #2563EB; color: white; border: none;
-            padding: 4px 8px; border-radius: 4px; cursor: pointer;
-            margin: 2px; font-size: 11px; font-weight: bold;
-        }
-        .btn-stop { background: #DC2626; }
-        .btn-pause { background: #D97706; }
-        .presets { font-size: 10px; color: #aaa; margin-bottom: 5px; }
+        .title { font-size: 12px; font-weight: bold; color: #8B949E; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* Estilos do Timer */
+        .time-display { font-size: 36px; font-weight: 800; margin: 10px 0; color: #4285F4; text-shadow: 0 0 10px rgba(66, 133, 244, 0.3); }
+        
+        /* Estilos dos Botões */
+        .btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin: 3px; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+        .btn:hover { opacity: 0.9; transform: scale(1.05); }
+        .btn-primary { background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; }
+        .btn-danger { background: linear-gradient(135deg, #DC2626, #B91C1C); color: white; }
+        .btn-warn { background: linear-gradient(135deg, #D97706, #B45309); color: white; }
+        .btn-dark { background: #374151; color: #E5E7EB; border: 1px solid #4B5563; }
+        
+        /* Presets */
+        .presets { margin-bottom: 10px; display: flex; justify-content: center; gap: 5px; }
+        .preset-btn { background: transparent; border: 1px solid #4B5563; color: #9CA3AF; padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; }
+        .preset-btn:hover { border-color: #60A5FA; color: #60A5FA; }
+
+        /* Player */
+        .player-status { font-size: 11px; color: #34D399; margin-top: 5px; display: none; }
+        iframe { display: none; } /* Esconde o vídeo do YouTube */
     </style>
     
-    <div class="timer-box">
-        <div style="font-size: 12px; font-weight: bold; color: #aaa;">🍅 Foco Ativo</div>
-        <div class="time-display" id="timer">25:00</div>
+    <div class="widget-box">
+        <div class="title">🍅 Pomodoro Focus</div>
         
         <div class="presets">
-            <button class="btn-pomo" onclick="setTime(25)">25m</button>
-            <button class="btn-pomo" onclick="setTime(50)">50m</button>
-            <button class="btn-pomo" onclick="setTime(5)">5m</button>
+            <button class="preset-btn" onclick="setTime(25)">25m</button>
+            <button class="preset-btn" onclick="setTime(50)">50m</button>
+            <button class="preset-btn" onclick="setTime(5)">5m</button>
         </div>
 
+        <div class="time-display" id="timer">25:00</div>
+        <div id="pomo-status" style="font-size:11px; color:#6B7280; margin-bottom:10px;">Pronto para focar</div>
+
         <div>
-            <button class="btn-pomo" onclick="startTimer()">▶ PLAY</button>
-            <button class="btn-pomo btn-pause" onclick="pauseTimer()">⏸ PAUSE</button>
-            <button class="btn-pomo btn-stop" onclick="resetTimer()">↻</button>
+            <button class="btn btn-primary" onclick="startTimer()">▶ Iniciar</button>
+            <button class="btn btn-warn" onclick="pauseTimer()">⏸ Pausa</button>
+            <button class="btn btn-danger" onclick="resetTimer()">↺</button>
         </div>
     </div>
 
+    <div class="widget-box">
+        <div class="title">🎵 Rádio Lofi (24h)</div>
+        
+        <div id="youtube-player"></div>
+        
+        <div style="margin-top:10px;">
+            <button class="btn btn-dark" onclick="playMusic()">▶ Play</button>
+            <button class="btn btn-dark" onclick="pauseMusic()">⏸ Pause</button>
+            <button class="btn btn-dark" onclick="volUp()">🔊 +</button>
+            <button class="btn btn-dark" onclick="volDown()">🔉 -</button>
+        </div>
+        <div id="music-status" class="player-status">Tocando...</div>
+    </div>
+
     <script>
+        // --- LOGICA DO TIMER ---
         let time = 25 * 60;
         let initialTime = 25 * 60;
         let interval = null;
-        let isRunning = false;
-        // Som de Alerta (Beep)
         const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
 
         function updateDisplay() {
@@ -108,46 +132,99 @@ def render_sidebar_widgets():
             time = mins * 60;
             initialTime = time;
             updateDisplay();
+            document.getElementById('pomo-status').innerText = mins + " min definido";
         }
 
         function startTimer() {
-            if (isRunning) return;
-            isRunning = true;
+            if (interval) return;
+            document.getElementById('pomo-status').innerText = "Foco total...";
             interval = setInterval(() => {
                 if (time > 0) {
                     time--;
                     updateDisplay();
                 } else {
                     clearInterval(interval);
-                    isRunning = false;
+                    interval = null;
                     document.getElementById('timer').innerText = "00:00";
-                    alarm.play(); // Toca o som aqui!
-                    alert("⏰ O Tempo Acabou!"); // Alerta visual também
+                    alarm.play();
+                    document.getElementById('pomo-status').innerText = "Acabou!";
                 }
             }, 1000);
         }
 
         function pauseTimer() {
             clearInterval(interval);
-            isRunning = false;
+            interval = null;
+            document.getElementById('pomo-status').innerText = "Pausado";
         }
 
         function resetTimer() {
             pauseTimer();
             time = initialTime;
             updateDisplay();
+            document.getElementById('pomo-status').innerText = "Reiniciado";
+        }
+
+        // --- LOGICA DA MÚSICA (YOUTUBE API) ---
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtube-player', {
+                height: '0',
+                width: '0',
+                videoId: 'jfKfPfyJRdk', // ID do Lofi Girl
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 0,
+                    'loop': 1, // Loop Infinito
+                    'playlist': 'jfKfPfyJRdk' // Necessário para loop funcionar
+                },
+                events: {
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            // Player pronto, mas espera clique para tocar (política de browsers)
+            // event.target.setVolume(50);
+        }
+
+        function playMusic() {
+            if(player) {
+                player.playVideo();
+                document.getElementById('music-status').style.display = 'block';
+                document.getElementById('music-status').innerText = "Tocando 🎵";
+            }
+        }
+
+        function pauseMusic() {
+            if(player) {
+                player.pauseVideo();
+                document.getElementById('music-status').innerText = "Pausado";
+            }
+        }
+        
+        function volUp() {
+            if(player) {
+                let v = player.getVolume();
+                player.setVolume(v + 10);
+            }
+        }
+        
+        function volDown() {
+            if(player) {
+                let v = player.getVolume();
+                player.setVolume(v - 10);
+            }
         }
     </script>
     """
-    components.html(pomodoro_html, height=160)
-    
-    # --- 2. PLAYER DE MÚSICA (Spotify Embed) ---
-    st.markdown("🎵 **Rádio Lofi**")
-    # Iframe do Spotify compacto para caber na sidebar
-    components.html(
-        """<iframe style="border-radius:12px" src="https://open.spotify.com/embed/playlist/0vvXsWCC9xrXsKd4FyS8kM?utm_source=generator&theme=0" width="100%" height="80" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>""",
-        height=85
-    )
+    components.html(sidebar_html, height=350)
 
 # =============================================================================
 # 4. FUNÇÕES UTILITÁRIAS
@@ -274,7 +351,6 @@ st.markdown("""
         background: linear-gradient(90deg, #2563EB 0%, #7C3AED 100%);
         color: white; border: none; font-weight: 600; border-radius: 8px;
     }
-    /* Estilo do Rodapé */
     .footer-credits { 
         text-align: center; margin-top: 30px; padding-top: 20px;
         border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 11px; 
@@ -306,11 +382,11 @@ def add_xp(amount):
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
-    # >>> WIDGETS: TIMER + MÚSICA <<<
+    # >>> WIDGETS DE FOCO (AGORA COM MÚSICA CONTROLÁVEL) <<<
     render_sidebar_widgets()
+    
     st.markdown("---")
     
-    # STATUS IA
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
     else: st.success(f"🟢 **{status_msg}**")
@@ -323,11 +399,10 @@ with st.sidebar:
         "🎙️ Transcrição"
     ], label_visibility="collapsed")
     
-    # BARRA DE XP
     st.markdown("---")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     
-    # >>> CRÉDITOS DO DESENVOLVEDOR <<<
+    # CRÉDITOS
     st.markdown("""
     <div class='footer-credits'>
         Desenvolvido por<br>
@@ -412,38 +487,8 @@ elif menu == "📝 Gere seu Contrato":
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
-    # ONBOARDING (Explicação inicial)
     if not st.session_state.edital_text:
-        st.markdown("""
-        ### 🚀 Seu Professor Particular de Concursos
-        Bem-vindo ao **Mestre dos Editais**.
-        
-        **Como usar:**
-        1. Faça upload do seu Edital PDF.
-        2. A IA lê o conteúdo programático.
-        3. Você responde questões e treina para a prova!
-        """)
-        
-    def gerar_turbo(dificuldade, foco):
-        st.session_state.quiz_data = None
-        st.session_state.quiz_show_answer = False
-        st.session_state.user_choice = None
-        with st.spinner(f"⚡ Gerando questão rápida ({dificuldade})..."):
-            tema = f"FOCO: {foco}." if foco else "Tema aleatório do CONTEÚDO."
-            texto_reduzido = st.session_state.edital_text[:15000]
-            prompt = f"""
-            Role: Banca Examinadora. Task: Criar questão técnica baseada no edital.
-            IGNORE: Datas, regras admin. USE: Conteúdo Programático/Leis.
-            {tema} Nível: {dificuldade}.
-            JSON Output: {{"materia": "...", "enunciado": "...", "alternativas": {{"A":"...","B":"...","C":"...","D":"..."}}, "correta": "A", "explicacao": "..."}}
-            """
-            res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{texto_reduzido}", json_mode=True)
-            data = extract_json_surgical(res)
-            if data: st.session_state.quiz_data = data
-            else: st.error("Erro rápido. Tente de novo.")
-
-    if not st.session_state.edital_text:
-        f = st.file_uploader("Carregar Edital (PDF)", type=["pdf"])
+        st.markdown("### 🚀 Professor de Edital"); f = st.file_uploader("PDF", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
@@ -465,14 +510,20 @@ elif menu == "🎯 Mestre dos Editais":
         with ca:
             st.write(""); st.write("")
             if st.button("🔥 GERAR", type="primary", use_container_width=True):
-                gerar_turbo(diff, foco)
-                st.rerun()
+                st.session_state.quiz_data = None
+                st.session_state.quiz_show_answer = False
+                with st.spinner("⚡ Gerando..."):
+                    tema = f"FOCO: {foco}." if foco else "Tema aleatório."
+                    txt = st.session_state.edital_text[:15000]
+                    res = call_gemini("JSON Only.", f"Role: Banca. Task: Questão técnica. IGNORE: Datas/Regras. {tema} Nível: {diff}. JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}\nEDITAL:\n{txt}", json_mode=True)
+                    data = extract_json_surgical(res)
+                    if data: st.session_state.quiz_data = data; st.rerun()
+                    else: st.error("Erro.")
 
         if st.session_state.quiz_data:
             q = st.session_state.quiz_data
             st.markdown(f"### 📚 {q.get('materia','Geral')}")
             st.info(q['enunciado'])
-            
             opts = q['alternativas']
             if not st.session_state.quiz_show_answer:
                 c1,c2 = st.columns(2)
@@ -485,14 +536,18 @@ elif menu == "🎯 Mestre dos Editais":
                 for l,t in opts.items():
                     icon = "✅" if l==c else ("❌" if l==u else "⬜")
                     st.write(f"{icon} **{l})** {t}")
-                
                 if u==c: st.success("Acertou!"); add_xp(50)
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
-                
                 if st.button("➡️ Próxima Rápida", type="primary"):
-                    gerar_turbo(diff, foco)
-                    st.rerun()
+                    st.session_state.quiz_data = None
+                    st.session_state.quiz_show_answer = False
+                    with st.spinner("⚡"):
+                        tema = f"FOCO: {foco}." if foco else "Tema aleatório."
+                        txt = st.session_state.edital_text[:15000]
+                        res = call_gemini("JSON Only.", f"Role: Banca. Task: Questão técnica. IGNORE: Datas/Regras. {tema} Nível: {diff}. JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}\nEDITAL:\n{txt}", json_mode=True)
+                        data = extract_json_surgical(res)
+                        if data: st.session_state.quiz_data = data; st.rerun()
 
 # --- 4. EXTRAS ---
 elif menu == "🏢 Cartório OCR": st.title("🏢 OCR"); st.file_uploader("Arquivo")
