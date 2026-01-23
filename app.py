@@ -121,26 +121,20 @@ def extract_json_surgical(text):
     return None
 
 # =============================================================================
-# 5. MANIPULAÇÃO DE ARQUIVOS (OTIMIZADO V39.1)
+# 5. MANIPULAÇÃO DE ARQUIVOS (ANTI-LOOP)
 # =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
         text_content = ""
         with pdfplumber.open(BytesIO(file_obj.getvalue())) as pdf:
-            # Lê no máximo 50 páginas para evitar travar em arquivos gigantes
-            max_pages = 50
-            total_pages = len(pdf.pages)
-            pages_to_read = min(total_pages, max_pages)
-            
-            for i in range(pages_to_read):
-                page_text = pdf.pages[i].extract_text()
-                if page_text:
-                    text_content += page_text + "\n"
-                    
-        if not text_content.strip():
-            return None # Retorna None se for PDF Scaneado (Imagem)
-            
+            max_pages = 50 # Limite de segurança
+            for i, page in enumerate(pdf.pages):
+                if i >= max_pages: break
+                extracted = page.extract_text()
+                if extracted: text_content += extracted + "\n"
+        
+        if not text_content.strip(): return None 
         return text_content
     except Exception as e: return f"Erro PDF: {str(e)}"
 
@@ -194,16 +188,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- GERENCIAMENTO DE ESTADO ---
+# --- ESTADO ---
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "contract_step" not in st.session_state: st.session_state.contract_step = 1
 if "contract_clauses" not in st.session_state: st.session_state.contract_clauses = []
 if "contract_meta" not in st.session_state: st.session_state.contract_meta = {}
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
-if "edital_text" not in st.session_state: st.session_state.edital_text = ""
-if "edital_warning" not in st.session_state: st.session_state.edital_warning = None
 
-# Estados do Quiz
+# Estados do Mestre dos Editais
+if "edital_text" not in st.session_state: st.session_state.edital_text = ""
+if "edital_filename" not in st.session_state: st.session_state.edital_filename = "" 
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = None
 if "quiz_show_answer" not in st.session_state: st.session_state.quiz_show_answer = False
 if "user_choice" not in st.session_state: st.session_state.user_choice = None
@@ -240,7 +234,7 @@ with st.sidebar:
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history:
-        st.info(f"Olá. Estou conectado e pronto para ajudar.")
+        st.info(f"Olá. Sou o Carmélio AI. Estou pronto.")
         
     for msg in st.session_state.chat_history:
         avatar = "🧑‍⚖️" if msg["role"] == "user" else "🤖"
@@ -252,7 +246,7 @@ if menu == "✨ Chat Inteligente":
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Analisando..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                res = call_gemini("Você é um Advogado Sênior. Seja didático e cite leis.", history)
+                res = call_gemini("Você é um Advogado Sênior. Seja didático.", history)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
@@ -342,50 +336,49 @@ elif menu == "📝 Gere seu Contrato":
                     ans = call_gemini("Revisor.", f"Texto: {full_text}\nPedido: {q}")
                     st.write(ans)
 
-# --- 3. MESTRE DOS EDITAIS (PROTEGIDO) ---
+# --- 3. MESTRE DOS EDITAIS (AGORA COM ANTI-LOOP) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
-    # 1. Onboarding
-    if not st.session_state.edital_text and not st.session_state.edital_warning:
+    # --- ÁREA DE UPLOAD ---
+    # Só mostra o uploader se NÃO tiver texto carregado
+    if not st.session_state.edital_text:
         st.markdown("""
-        ### 🚀 Transforme seu Edital em um Professor
-        **Passo a passo:**
-        1. Faça upload do Edital (PDF de Texto).
-        2. O sistema vai ler as matérias.
-        3. Você gera questões e treina como se estivesse na prova.
+        ### 🚀 Professor de Edital
+        **Faça upload do seu PDF para começar.**
         """)
-    
-    # Aviso de Erro (se houver)
-    if st.session_state.edital_warning:
-        st.warning(st.session_state.edital_warning)
-    
-    # 2. Área de Upload (Expander)
-    with st.expander("📂 Carregar/Trocar Edital", expanded=not bool(st.session_state.edital_text)):
-        f = st.file_uploader("Upload do PDF", type=["pdf"])
+        f = st.file_uploader("Carregar PDF", type=["pdf"])
+        
         if f:
-            with st.spinner("Lendo (Máx 50 págs)..."):
-                # Limpa estados anteriores
-                st.session_state.edital_text = ""
-                st.session_state.edital_warning = None
-                
-                texto = read_pdf_safe(f)
-                
-                if texto and len(texto) > 100:
-                    st.session_state.edital_text = texto
-                    st.session_state.quiz_data = None 
-                    st.session_state.quiz_show_answer = False
-                    st.success("Edital carregado com sucesso!")
-                else:
-                    st.session_state.edital_warning = "⚠️ **Atenção:** Não consegui ler texto neste PDF. Ele parece ser uma **imagem escaneada**. Por favor, use um PDF pesquisável (onde você consegue selecionar o texto)."
-            
+            # VERIFICA SE O ARQUIVO É NOVO (Evita Loop)
+            if f.name != st.session_state.edital_filename:
+                with st.spinner("Lendo (Máx 50 págs)..."):
+                    texto = read_pdf_safe(f)
+                    
+                    if texto and len(texto) > 100:
+                        st.session_state.edital_text = texto
+                        st.session_state.edital_filename = f.name # Marca como lido
+                        st.session_state.quiz_data = None 
+                        st.session_state.quiz_show_answer = False
+                        st.success("Edital Mapeado! A interface vai atualizar...")
+                        time.sleep(1)
+                        st.rerun() # Força atualização para mostrar a área de treino
+                    else:
+                        st.error("⚠️ Este PDF parece ser uma imagem (escaneado). Tente um PDF com texto selecionável.")
+    
+    # --- ÁREA DE TREINO (Aparece automaticamente se tiver texto) ---
+    else:
+        # Barra de status do arquivo
+        c_info, c_reset = st.columns([3, 1])
+        c_info.success(f"📂 Arquivo Ativo: **{st.session_state.edital_filename}**")
+        if c_reset.button("🗑️ Limpar / Trocar", use_container_width=True):
+            st.session_state.edital_text = ""
+            st.session_state.edital_filename = ""
+            st.session_state.quiz_data = None
             st.rerun()
-
-    # 3. Área de Treino
-    if st.session_state.edital_text:
+        
         st.markdown("---")
         
-        # Configuração do Treino
         col_config, col_action = st.columns([2, 1])
         with col_config:
             dificuldade = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
@@ -426,12 +419,11 @@ elif menu == "🎯 Mestre dos Editais":
                     else:
                         st.error("Erro ao criar questão. Tente novamente.")
 
-        # 4. Exibição da Questão (Quiz)
+        # Exibição do Quiz
         if st.session_state.quiz_data:
             q = st.session_state.quiz_data
             st.markdown(f"### 📚 Matéria: {q.get('materia', 'Geral')}")
             
-            # Enunciado
             st.markdown(f"""
             <div style="background:#1F2430;padding:20px;border-radius:10px;border:1px solid #374151;margin-bottom:20px;">
                 <b style="font-size:1.1rem;">{q['enunciado']}</b>
@@ -440,7 +432,6 @@ elif menu == "🎯 Mestre dos Editais":
             
             opts = q['alternativas']
             
-            # Modo Pergunta
             if not st.session_state.quiz_show_answer:
                 st.info("🤔 Escolha a alternativa correta:")
                 c1, c2 = st.columns(2)
@@ -452,13 +443,10 @@ elif menu == "🎯 Mestre dos Editais":
                     st.session_state.user_choice = "C"; st.session_state.quiz_show_answer = True; st.rerun()
                 if c2.button(f"D) {opts['D']}", use_container_width=True): 
                     st.session_state.user_choice = "D"; st.session_state.quiz_show_answer = True; st.rerun()
-            
-            # Modo Resposta
             else:
                 user = st.session_state.user_choice
                 correct = q['correta']
                 
-                # Mostra alternativas com marcação
                 for l, t in opts.items():
                     prefix = "⬜"
                     if l == correct: prefix = "✅"
@@ -467,9 +455,9 @@ elif menu == "🎯 Mestre dos Editais":
 
                 st.markdown("---")
                 if user == correct: 
-                    st.success("🎉 **PARABÉNS!** Resposta Correta!"); add_xp(50)
+                    st.success("🎉 **PARABÉNS!**"); add_xp(50)
                 else: 
-                    st.error(f"⚠️ **Incorreto.** Você marcou {user}, mas a certa é {correct}.")
+                    st.error(f"⚠️ **Incorreto.** A certa é {correct}.")
                 
                 with st.expander("📖 Gabarito Comentado", expanded=True):
                     st.markdown(q['explicacao'])
