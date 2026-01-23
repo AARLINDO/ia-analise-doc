@@ -1,112 +1,97 @@
 import streamlit as st
 import os
 import json
+import base64
 import time
 import re
 from datetime import datetime
 from io import BytesIO
 
 # =============================================================================
-# 1. CONFIGURAÇÃO & SETUP INICIAL
+# 1. CONFIGURAÇÃO INICIAL (Deve ser a primeira linha executável)
 # =============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Enterprise",
+    page_title="Carmélio AI | Suíte Jurídica Pro",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- IMPORTAÇÕES SEGURAS (FALLBACKS) ---
-# Evita que o app quebre se faltar alguma biblioteca no servidor
-try: from groq import Groq
-except ImportError: Groq = None
+# =============================================================================
+# 2. IMPORTAÇÕES SEGURAS (CORREÇÃO DO SYNTAX ERROR)
+# =============================================================================
+# As importações estão protegidas. Se faltar biblioteca, o app não cai.
 
-try: import google.generativeai as genai
-except ImportError: genai = None
+try: 
+    from groq import Groq
+except ImportError: 
+    Groq = None
 
-try: from openai import OpenAI
-except ImportError: OpenAI = None
+try: 
+    import pdfplumber
+except ImportError: 
+    pdfplumber = None
 
-try: import pdfplumber
-except ImportError: pdfplumber = None
-
-try: import docx
-    from docx import Document
-except ImportError: docx = None
+try: 
+    import docx
+    from docx import Document 
+except ImportError: 
+    docx = None
     Document = None
 
-try: from PIL import Image
-except ImportError: Image = None
+try: 
+    from PIL import Image
+except ImportError: 
+    Image = None
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 # =============================================================================
-# 2. DESIGN SYSTEM (CSS & UI)
+# 3. DEFINIÇÃO DE FUNÇÕES (O "MOTOR" DO SISTEMA)
 # =============================================================================
-def load_css():
-    st.markdown("""
-    <style>
-        /* Base Dark Modern */
-        .stApp { background-color: #0E1117; color: #E0E0E0; }
-        [data-testid="stSidebar"] { background-color: #11141d; border-right: 1px solid #2B2F3B; }
-        
-        /* Tipografia de Impacto */
-        .gemini-text {
-            background: -webkit-linear-gradient(45deg, #3B82F6, #8B5CF6, #EC4899);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            font-weight: 800; font-size: 2.2rem;
-        }
-        
-        /* Cards e Containers */
-        .clause-card {
-            background-color: #1F2430; border: 1px solid #374151;
-            border-radius: 12px; padding: 20px; margin-bottom: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
-        
-        /* Botões Premium */
-        div.stButton > button {
-            background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%);
-            color: white; border: none; font-weight: 600; border-radius: 8px;
-            padding: 0.5rem 1rem; transition: all 0.3s ease;
-        }
-        div.stButton > button:hover {
-            transform: translateY(-2px); box-shadow: 0 6px 12px rgba(124, 58, 237, 0.3);
-        }
-        
-        /* Inputs Escuros */
-        .stTextInput>div>div>input, .stTextArea>div>div>textarea {
-            background-color: #161B26 !important; color: white !important; 
-            border: 1px solid #374151 !important; border-radius: 8px;
-        }
-        
-        /* Footer */
-        .footer-credits { 
-            text-align: center; margin-top: 40px; border-top: 1px solid #2B2F3B; 
-            padding-top: 20px; color: #6B7280; font-size: 12px; 
-        }
-    </style>
-    """, unsafe_allow_html=True)
+# ATENÇÃO: As funções estão aqui no topo para evitar o NameError.
 
 def safe_image_show(image_path):
-    """Exibe imagem com compatibilidade total de versões."""
+    """Exibe imagem com compatibilidade entre versões do Streamlit."""
     if os.path.exists(image_path):
-        try: st.image(image_path, use_container_width=True)
-        except TypeError: st.image(image_path, use_column_width=True)
+        try:
+            # Tenta comando novo (v1.39+)
+            st.image(image_path, use_container_width=True)
+        except TypeError:
+            # Fallback para versões antigas
+            st.image(image_path, use_column_width=True)
     else:
-        st.markdown("## ⚖️ Carmélio AI")
+        # Se não tiver logo, mostra texto elegante
+        st.markdown("### ⚖️ Carmélio AI")
 
 def get_audio_input_safe(label):
-    """Fallback inteligente para gravação de áudio."""
+    """Verifica se o ambiente suporta gravação nativa (Evita AttributeError)."""
     if hasattr(st, "audio_input"):
         return st.audio_input(label)
     else:
-        st.warning("⚠️ Gravação direta indisponível nesta versão. Use o Upload.")
-        return st.file_uploader(label, type=["wav", "mp3", "m4a", "ogg"])
+        st.warning("⚠️ Gravação direta indisponível nesta versão do servidor. Use o Upload abaixo.")
+        return None # Retorna None para forçar uso do upload
 
-# =============================================================================
-# 3. MOTOR DE INTELIGÊNCIA (AI CORE)
-# =============================================================================
-# Cache evita reconectar a cada clique, deixando o app rápido
-@st.cache_resource
+def check_rate_limit():
+    """Evita spam de cliques na API."""
+    if "last_call" not in st.session_state: st.session_state.last_call = 0
+    now = time.time()
+    if now - st.session_state.last_call < 2: # 2 segundos de intervalo
+        return True
+    return False
+
+def mark_call():
+    st.session_state.last_call = time.time()
+
+# --- INTEGRAÇÃO COM MULTI-MODELOS (GROQ, GEMINI, OPENAI) ---
 def get_ai_clients():
     clients = {"groq": None, "gemini": None, "openai": None}
     
@@ -127,10 +112,13 @@ def get_ai_clients():
     return clients
 
 def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False):
-    """Função Mestra que roteia para a IA escolhida."""
+    """Central de Inteligência Artificial Unificada."""
+    if check_rate_limit(): return None
+    mark_call()
+    
     clients = get_ai_clients()
     
-    # 1. GROQ (Llama 3) - Rápido e Gratuito
+    # 1. GROQ (Llama 3)
     if provider == "groq":
         if not clients["groq"]: return "⚠️ Erro: Groq não configurado."
         try:
@@ -143,7 +131,7 @@ def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False
             return clients["groq"].chat.completions.create(**kwargs).choices[0].message.content
         except Exception as e: return f"Erro Groq: {str(e)}"
 
-    # 2. GEMINI (Google) - Contexto Longo
+    # 2. GEMINI (Google)
     elif provider == "gemini":
         if not clients["gemini"]: return "⚠️ Erro: Gemini não configurado."
         try:
@@ -152,7 +140,7 @@ def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False
             return clients["gemini"].generate_content(full_prompt).text
         except Exception as e: return f"Erro Gemini: {str(e)}"
 
-    # 3. OPENAI (GPT-4) - Alta Precisão
+    # 3. OPENAI (GPT-4)
     elif provider == "openai":
         if not clients["openai"]: return "⚠️ Erro: OpenAI não configurada."
         try:
@@ -168,16 +156,14 @@ def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False
     return "Provedor desconhecido."
 
 def extract_json_surgical(text):
-    """Extrai JSON válido mesmo que a IA fale antes."""
+    """Extrai JSON válido mesmo que a IA escreva texto em volta."""
     try:
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: return json.loads(match.group(0))
     except: pass
     return None
 
-# =============================================================================
-# 4. MOTOR DE DOCUMENTOS (DOC ENGINE)
-# =============================================================================
+# --- MOTOR DE DOCUMENTOS ---
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
@@ -186,7 +172,6 @@ def read_pdf_safe(file_obj):
     except Exception as e: return f"Erro ao ler PDF: {str(e)}"
 
 def markdown_to_docx(doc_obj, text):
-    """Converte markdown (*negrito*, # títulos) para Word."""
     if not text: return
     for line in text.split('\n'):
         line = line.strip()
@@ -196,7 +181,6 @@ def markdown_to_docx(doc_obj, text):
         elif line.startswith('### '): doc_obj.add_heading(line[4:], 2)
         else:
             p = doc_obj.add_paragraph()
-            # Tratamento simples de negrito
             parts = re.split(r'(\*\*.*?\*\*)', line)
             for part in parts:
                 if part.startswith('**') and part.endswith('**'):
@@ -207,50 +191,68 @@ def markdown_to_docx(doc_obj, text):
 def create_contract_docx(clauses, meta):
     if not docx: return None
     doc = Document()
-    
-    # Título e Data
     doc.add_heading(meta.get('tipo', 'CONTRATO').upper(), 0)
-    doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y')}").italic = True
-    
-    # Estrutura Base
     doc.add_heading("1. QUALIFICAÇÃO", level=1)
     doc.add_paragraph(meta.get('partes', ''))
-    
     doc.add_heading("2. DO OBJETO", level=1)
     doc.add_paragraph(meta.get('objeto', ''))
-    
-    # Cláusulas Dinâmicas
     for clause in clauses:
         doc.add_heading(clause.get('titulo', 'Cláusula'), level=1)
         markdown_to_docx(doc, clause.get('conteudo', ''))
-        
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
 # =============================================================================
-# 5. EXECUÇÃO PRINCIPAL (APP)
+# 4. DESIGN SYSTEM (CSS)
 # =============================================================================
+st.markdown("""
+<style>
+    .stApp { background-color: #0E1117; color: #E0E0E0; }
+    [data-testid="stSidebar"] { background-color: #11141d; border-right: 1px solid #2B2F3B; }
+    .gemini-text {
+        background: -webkit-linear-gradient(45deg, #3B82F6, #8B5CF6, #EC4899);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-weight: 800; font-size: 2.2rem;
+    }
+    .clause-card {
+        background-color: #1F2430; border: 1px solid #374151;
+        border-radius: 12px; padding: 20px; margin-bottom: 15px;
+    }
+    div.stButton > button {
+        background-color: #7C3AED; color: white; border: none; font-weight: 600;
+        border-radius: 8px; transition: 0.2s;
+    }
+    div.stButton > button:hover { background-color: #6D28D9; transform: scale(1.02); }
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+        background-color: #161B26 !important; color: white !important; border: 1px solid #374151 !important;
+    }
+    .footer-credits { text-align: center; margin-top: 30px; border-top: 1px solid #2B2F3B; padding-top: 20px; color: #6B7280; font-size: 12px; }
+</style>
+""", unsafe_allow_html=True)
 
-# Carrega CSS
-load_css()
-
-# Inicializa Estado (Memória da Sessão)
+# =============================================================================
+# 5. INICIALIZAÇÃO DE ESTADO
+# =============================================================================
 if "user_xp" not in st.session_state: st.session_state.user_xp = 0
 if "contract_step" not in st.session_state: st.session_state.contract_step = 1
 if "contract_clauses" not in st.session_state: st.session_state.contract_clauses = []
+if "contract_meta" not in st.session_state: st.session_state.contract_meta = {}
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
 if "ai_provider" not in st.session_state: st.session_state.ai_provider = "groq"
+if "pomo_auto_start" not in st.session_state: st.session_state.pomo_auto_start = False
 
 def add_xp(amount):
     st.session_state.user_xp += amount
     st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
 
-# --- BARRA LATERAL ---
+# =============================================================================
+# 6. SIDEBAR (NAVEGAÇÃO)
+# =============================================================================
 with st.sidebar:
-    safe_image_show("logo.jpg.png")
+    safe_image_show("logo.jpg.png") # Agora a função existe e funciona!
     
     st.markdown("### 🧠 Cérebro")
     # Seletor de IA persistente
@@ -278,9 +280,11 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por <br><strong style='color: #E5E7EB;'>Arthur Carmélio</strong></div>""", unsafe_allow_html=True)
 
-# --- LÓGICA DOS MÓDULOS ---
+# =============================================================================
+# 7. MÓDULOS DO SISTEMA
+# =============================================================================
 
-# 1. CHAT INTELIGENTE
+# --- MÓDULO 1: CHAT INTELIGENTE (CÉREBRO) ---
 if menu == "✨ Chat Inteligente":
     st.markdown(f'<h1 class="gemini-text">Mentor Jurídico ({st.session_state.ai_provider.upper()})</h1>', unsafe_allow_html=True)
     
@@ -297,23 +301,16 @@ if menu == "✨ Chat Inteligente":
         
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Pesquisando legislação..."):
-                ctx_msgs = st.session_state.chat_history[-6:] # Contexto curto
-                # Formata contexto para string se não for OpenAI/Groq list
-                if st.session_state.ai_provider == "gemini":
-                    ctx_str = "\n".join([f"{m['role']}: {m['content']}" for m in ctx_msgs])
-                    res = call_ai_unified("Você é um jurista sênior brasileiro.", ctx_str, st.session_state.ai_provider)
-                else:
-                    # OpenAI/Groq aceitam lista de mensagens
-                    # Mas minha função unified espera prompt string ou lista? 
-                    # Vamos adaptar para garantir string no user_prompt
-                    ctx_str = "\n".join([f"{m['role']}: {m['content']}" for m in ctx_msgs])
-                    res = call_ai_unified("Você é um jurista sênior brasileiro. Cite leis.", ctx_str, st.session_state.ai_provider)
+                ctx_msgs = st.session_state.chat_history[-6:]
+                # Adaptação para envio como string única
+                ctx_str = "\n".join([f"{m['role']}: {m['content']}" for m in ctx_msgs])
+                res = call_ai_unified("Você é um jurista sênior brasileiro. Cite leis.", ctx_str, st.session_state.ai_provider)
                 
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# 2. REDAÇÃO PRO (BUILDER)
+# --- MÓDULO 2: REDAÇÃO PRO (CONTRACT BUILDER) ---
 elif menu == "📝 Redação Pro (Builder)":
     step = st.session_state.contract_step
     
@@ -378,7 +375,8 @@ elif menu == "📝 Redação Pro (Builder)":
         
         with c_view:
             docx = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
-            st.download_button("💾 BAIXAR DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+            if docx:
+                st.download_button("💾 BAIXAR DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
             
             full_text = f"# {st.session_state.contract_meta.get('tipo')}\n\n"
             for c in st.session_state.contract_clauses: full_text += f"## {c['titulo']}\n{c['conteudo']}\n\n"
@@ -396,7 +394,7 @@ elif menu == "📝 Redação Pro (Builder)":
                     ans = call_ai_unified("Revisor Jurídico.", f"Texto: {full_text}\nPedido: {q}", st.session_state.ai_provider)
                     st.write(ans)
 
-# 3. MESTRE DOS EDITAIS
+# --- MÓDULO 3: MESTRE DOS EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     f = st.file_uploader("Upload PDF", type=["pdf"])
@@ -410,13 +408,16 @@ elif menu == "🎯 Mestre dos Editais":
             res = call_ai_unified("Examinador de Banca.", f"Crie questão difícil sobre: {st.session_state.edital_text[:4000]}", st.session_state.ai_provider)
             st.markdown(f"<div class='clause-card'>{res}</div>", unsafe_allow_html=True)
 
-# 4. SALA DE FOCO
+# --- MÓDULO 4: SALA DE FOCO ---
 elif menu == "🍅 Sala de Foco":
     st.title("🍅 Sala de Foco")
     if st.button("Iniciar Foco 25m", type="primary"):
         with st.spinner("Focando..."): time.sleep(1); st.success("Timer Iniciado!")
+    
+    # Checkbox corrigido para evitar SyntaxError antigo
+    st.checkbox("Ciclos Automáticos", key="pomo_auto_start")
 
-# 5. OCR & TRANSCRIÇÃO
+# --- MÓDULO 5: OCR & TRANSCRIÇÃO ---
 elif menu == "🏢 Cartório OCR":
     st.title("🏢 Leitor de Documentos")
     u = st.file_uploader("Arquivo", type=["jpg","png","pdf"])
@@ -426,7 +427,10 @@ elif menu == "🏢 Cartório OCR":
 
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição")
+    
+    # Abas corrigidas para evitar erro de versão
     t1, t2 = st.tabs(["📂 Upload", "🎤 Microfone"])
+    
     with t1:
         f = st.file_uploader("Áudio", type=["mp3","wav"])
         if f and st.button("Transcrever"):
@@ -434,6 +438,8 @@ elif menu == "🎙️ Transcrição":
                 # Simulação para Groq Audio (ou implementação real se tiver biblioteca instalada)
                 st.success("Áudio processado!")
                 st.text_area("Texto:", "Transcrição realizada com sucesso...")
+    
     with t2:
+        # Fallback seguro que evita o AttributeError
         mic = get_audio_input_safe("Gravar")
-        if mic: st.info("Áudio capturado.")
+        if mic: st.info("Áudio capturado. Pronto para envio.")
