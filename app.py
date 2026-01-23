@@ -8,7 +8,7 @@ from datetime import datetime
 from io import BytesIO
 
 # =============================================================================
-# 1. CONFIGURAÇÃO
+# 1. CONFIGURAÇÃO INICIAL
 # =============================================================================
 st.set_page_config(
     page_title="Carmélio AI | Ultimate Studio",
@@ -18,14 +18,12 @@ st.set_page_config(
 )
 
 # =============================================================================
-# 2. IMPORTAÇÕES
+# 2. IMPORTAÇÕES COM TRATAMENTO DE ERROS
 # =============================================================================
 try: 
     import google.generativeai as genai
-    LIB_VERSION = getattr(genai, "__version__", "Desconhecida")
 except ImportError: 
     genai = None
-    LIB_VERSION = "N/A"
 
 try: import pdfplumber
 except ImportError: pdfplumber = None
@@ -41,9 +39,13 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 3. WIDGETS DA BARRA LATERAL (TIMER + PLAYER)
+# 3. MÓDULO DE INTERFACE (SIDEBAR E WIDGETS)
 # =============================================================================
 def render_sidebar_widgets():
+    """
+    Renderiza os Widgets de Foco (Timer Pomodoro e Player de Música)
+    utilizando HTML/JS injetado para não travar o loop do Python.
+    """
     sidebar_html = """
     <style>
         .widget-box {
@@ -136,15 +138,10 @@ def render_sidebar_widgets():
     components.html(sidebar_html, height=350)
 
 # =============================================================================
-# 4. FUNÇÕES DE IA & ARQUIVOS
+# 4. MOTOR DE INTELIGÊNCIA ARTIFICIAL
 # =============================================================================
-def safe_image_show(image_path):
-    if os.path.exists(image_path):
-        try: st.image(image_path, use_container_width=True)
-        except TypeError: st.image(image_path, use_column_width=True)
-    else: st.markdown("## ⚖️ Carmélio AI")
-
 def check_rate_limit():
+    """Evita chamadas excessivas à API (proteção anti-spam)."""
     if "last_call" not in st.session_state: st.session_state.last_call = 0
     if time.time() - st.session_state.last_call < 0.5: return True 
     return False
@@ -153,6 +150,7 @@ def mark_call(): st.session_state.last_call = time.time()
 
 @st.cache_resource
 def get_best_model():
+    """Configura o Gemini e seleciona o melhor modelo disponível."""
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key: return None, "⚠️ Configure secrets.toml"
     try:
@@ -166,6 +164,7 @@ def get_best_model():
     except Exception as e: return None, f"Erro Fatal: {str(e)}"
 
 def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
+    """Função central para chamar a IA."""
     if check_rate_limit(): return None
     mark_call()
     model, name = get_best_model()
@@ -181,6 +180,7 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
     except Exception as e: return f"Erro IA: {str(e)}"
 
 def extract_json_surgical(text):
+    """Limpa a resposta da IA para garantir que seja um JSON válido."""
     try:
         text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
@@ -188,6 +188,9 @@ def extract_json_surgical(text):
     except: pass
     return None
 
+# =============================================================================
+# 5. GERENCIAMENTO DE ARQUIVOS
+# =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return None
     try:
@@ -199,7 +202,6 @@ def read_pdf_safe(file_obj):
         return text if text.strip() else None
     except: return None
 
-# --- FÁBRICA DE DOCX GENÉRICA ---
 def create_generic_docx(content, title="Documento Carmélio AI"):
     if not docx: return None
     doc = Document()
@@ -229,8 +231,18 @@ def create_contract_docx(clauses, meta):
     buffer.seek(0)
     return buffer
 
+def safe_image_show(image_path):
+    if os.path.exists(image_path):
+        try: st.image(image_path, use_container_width=True)
+        except TypeError: st.image(image_path, use_column_width=True)
+    else: st.markdown("## ⚖️ Carmélio AI")
+
+def add_xp(amount):
+    st.session_state.user_xp += amount
+    st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
+
 # =============================================================================
-# 6. ESTILO E ESTADO
+# 6. CSS E ESTADO
 # =============================================================================
 st.markdown("""
 <style>
@@ -257,28 +269,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-if "user_xp" not in st.session_state: st.session_state.user_xp = 0
-if "contract_step" not in st.session_state: st.session_state.contract_step = 1
-if "contract_clauses" not in st.session_state: st.session_state.contract_clauses = []
-if "contract_meta" not in st.session_state: st.session_state.contract_meta = {}
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
-if "edital_text" not in st.session_state: st.session_state.edital_text = ""
-if "edital_filename" not in st.session_state: st.session_state.edital_filename = "" 
-if "quiz_data" not in st.session_state: st.session_state.quiz_data = None
-if "quiz_show_answer" not in st.session_state: st.session_state.quiz_show_answer = False
-if "user_choice" not in st.session_state: st.session_state.user_choice = None
-if "ocr_text" not in st.session_state: st.session_state.ocr_text = ""
-
-def add_xp(amount):
-    st.session_state.user_xp += amount
-    st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
+# Inicialização de Estado (Session State)
+keys = {
+    "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
+    "contract_meta": {}, "chat_history": [], "edital_text": "", 
+    "edital_filename": "", "quiz_data": None, "quiz_show_answer": False, 
+    "user_choice": None, "ocr_text": ""
+}
+for k, v in keys.items():
+    if k not in st.session_state: st.session_state[k] = v
 
 # =============================================================================
-# 7. APP PRINCIPAL
+# 7. APLICAÇÃO PRINCIPAL (MAIN LOOP)
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
-    render_sidebar_widgets()
+    render_sidebar_widgets() # Widget HTML
     st.markdown("---")
     
     model_obj, status_msg = get_best_model()
@@ -295,15 +301,9 @@ with st.sidebar:
     
     st.markdown("---")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
-    st.markdown("""
-    <div class='footer-credits'>
-        Desenvolvido por<br>
-        <strong>Arthur Carmélio</strong><br>
-        © 2026 Carmélio AI
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# --- 1. CHAT ---
+# --- 1. MÓDULO CHAT ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
@@ -314,14 +314,14 @@ if menu == "✨ Chat Inteligente":
         st.session_state.chat_history.append({"role": "user", "content": p})
         with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
         with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("..."):
+            with st.spinner("Analisando..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                res = call_gemini("Advogado Sênior.", history)
+                res = call_gemini("Advogado Sênior. Responda em Português do Brasil.", history)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. CONTRATOS ---
+# --- 2. MÓDULO CONTRATOS ---
 elif menu == "📝 Gere seu Contrato":
     st.title("📝 Gere seu Contrato")
     step = st.session_state.contract_step
@@ -352,7 +352,7 @@ elif menu == "📝 Gere seu Contrato":
                             st.session_state.contract_step = 2
                             add_xp(25)
                             st.rerun()
-                        else: st.error("Erro.")
+                        else: st.error("Erro ao gerar minuta.")
     elif step == 2:
         st.header("📑 Revisão"); 
         if st.button("➕ Cláusula"): st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."}); st.rerun()
@@ -374,7 +374,7 @@ elif menu == "📝 Gere seu Contrato":
         if docx: st.download_button("💾 Baixar DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
         if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
 
-# --- 3. MESTRE DOS EDITAIS ---
+# --- 3. MÓDULO EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
@@ -404,7 +404,7 @@ elif menu == "🎯 Mestre dos Editais":
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto.")
+                else: st.error("PDF sem texto (imagem).")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -438,24 +438,19 @@ elif menu == "🎯 Mestre dos Editais":
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
                 
-                # BOTÃO DE DOWNLOAD DA QUESTÃO
                 q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
                 docx_q = create_generic_docx(q_text, "Questão de Concurso")
                 st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
                 if st.button("➡️ Próxima", type="primary"): gerar_turbo(diff, foco); st.rerun()
 
-# --- 4. CARTÓRIO OCR ---
+# --- 4. MÓDULO OCR ---
 elif menu == "🏢 Cartório OCR":
     st.title("🏢 Cartório OCR (Digitalizador)")
     st.markdown("""
     <div class="onboarding-box">
         <h4>📸 Do Papel para o Digital</h4>
-        <p>Ideal para digitalizar livros antigos de registro.</p>
-        <ul>
-            <li><b>Envie:</b> Foto da página do livro.</li>
-            <li><b>Receba:</b> Texto transcrito pronto para Certidão de Inteiro Teor.</li>
-        </ul>
+        <p>Digitalize livros antigos de registro.</p>
+        <ul><li><b>Envie:</b> Foto da página do livro.</li><li><b>Receba:</b> Texto transcrito para Certidão de Inteiro Teor.</li></ul>
     </div>
     """, unsafe_allow_html=True)
     
@@ -471,11 +466,10 @@ elif menu == "🏢 Cartório OCR":
     
     if st.session_state.ocr_text:
         st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
-        # BOTÃO DE DOWNLOAD OCR
         docx_ocr = create_generic_docx(st.session_state.ocr_text, "Transcrição de Livro")
         st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
-# --- 5. TRANSCRIÇÃO ---
+# --- 5. MÓDULO TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
     st.title("🎙️ Transcrição de Áudio")
     st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto</h4><p>Transcreva audiências e ditações.</p></div>""", unsafe_allow_html=True)
