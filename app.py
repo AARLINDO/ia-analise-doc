@@ -11,7 +11,7 @@ from io import BytesIO
 # 1. CONFIGURAÇÃO
 # =============================================================================
 st.set_page_config(
-    page_title="Carmélio AI | Student Flow",
+    page_title="Carmélio AI | Pro Studio",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -41,28 +41,30 @@ try: from PIL import Image
 except ImportError: Image = None
 
 # =============================================================================
-# 3. POMODORO FLUTUANTE (JAVASCRIPT PURO)
+# 3. WIDGETS DE FOCO (SIDEBAR)
 # =============================================================================
-def render_sidebar_pomodoro():
+def render_sidebar_widgets():
     """
-    Renderiza um timer que NÃO trava o Python e continua rodando
-    enquanto o usuário navega ou responde questões.
+    Renderiza Timer + Spotify + Créditos na Sidebar.
+    O Timer usa JavaScript para não travar o Python.
     """
+    
+    # --- 1. TIMER POMODORO (Com Alerta Sonoro) ---
     pomodoro_html = """
     <style>
         .timer-box {
             background-color: #1F2430; border: 1px solid #374151;
-            border-radius: 10px; padding: 15px; text-align: center;
-            color: white; font-family: sans-serif; margin-bottom: 20px;
+            border-radius: 8px; padding: 10px; text-align: center;
+            color: white; font-family: sans-serif; margin-bottom: 10px;
         }
         .time-display {
-            font-size: 32px; font-weight: bold; margin: 10px 0;
+            font-size: 28px; font-weight: bold; margin: 5px 0;
             color: #4285F4;
         }
         .btn-pomo {
             background: #2563EB; color: white; border: none;
-            padding: 5px 10px; border-radius: 5px; cursor: pointer;
-            margin: 2px; font-size: 12px;
+            padding: 4px 8px; border-radius: 4px; cursor: pointer;
+            margin: 2px; font-size: 11px; font-weight: bold;
         }
         .btn-stop { background: #DC2626; }
         .btn-pause { background: #D97706; }
@@ -70,7 +72,7 @@ def render_sidebar_pomodoro():
     </style>
     
     <div class="timer-box">
-        <div style="font-size: 14px; font-weight: bold;">🍅 Foco Contínuo</div>
+        <div style="font-size: 12px; font-weight: bold; color: #aaa;">🍅 Foco Ativo</div>
         <div class="time-display" id="timer">25:00</div>
         
         <div class="presets">
@@ -80,11 +82,10 @@ def render_sidebar_pomodoro():
         </div>
 
         <div>
-            <button class="btn-pomo" onclick="startTimer()">▶</button>
-            <button class="btn-pomo btn-pause" onclick="pauseTimer()">❚❚</button>
+            <button class="btn-pomo" onclick="startTimer()">▶ PLAY</button>
+            <button class="btn-pomo btn-pause" onclick="pauseTimer()">⏸ PAUSE</button>
             <button class="btn-pomo btn-stop" onclick="resetTimer()">↻</button>
         </div>
-        <div id="status" style="font-size:12px; margin-top:5px; color:#aaa;">Pronto</div>
     </div>
 
     <script>
@@ -92,6 +93,8 @@ def render_sidebar_pomodoro():
         let initialTime = 25 * 60;
         let interval = null;
         let isRunning = false;
+        // Som de Alerta (Beep)
+        const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
 
         function updateDisplay() {
             let m = Math.floor(time / 60);
@@ -105,13 +108,11 @@ def render_sidebar_pomodoro():
             time = mins * 60;
             initialTime = time;
             updateDisplay();
-            document.getElementById('status').innerText = mins + " min definido";
         }
 
         function startTimer() {
             if (isRunning) return;
             isRunning = true;
-            document.getElementById('status').innerText = "Focando...";
             interval = setInterval(() => {
                 if (time > 0) {
                     time--;
@@ -120,9 +121,8 @@ def render_sidebar_pomodoro():
                     clearInterval(interval);
                     isRunning = false;
                     document.getElementById('timer').innerText = "00:00";
-                    document.getElementById('status').innerText = "⏰ Acabou!";
-                    // Toca um beep simples
-                    new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                    alarm.play(); // Toca o som aqui!
+                    alert("⏰ O Tempo Acabou!"); // Alerta visual também
                 }
             }, 1000);
         }
@@ -130,18 +130,24 @@ def render_sidebar_pomodoro():
         function pauseTimer() {
             clearInterval(interval);
             isRunning = false;
-            document.getElementById('status').innerText = "Pausado";
         }
 
         function resetTimer() {
             pauseTimer();
             time = initialTime;
             updateDisplay();
-            document.getElementById('status').innerText = "Reiniciado";
         }
     </script>
     """
-    components.html(pomodoro_html, height=180)
+    components.html(pomodoro_html, height=160)
+    
+    # --- 2. PLAYER DE MÚSICA (Spotify Embed) ---
+    st.markdown("🎵 **Rádio Lofi**")
+    # Iframe do Spotify compacto para caber na sidebar
+    components.html(
+        """<iframe style="border-radius:12px" src="https://open.spotify.com/embed/playlist/0vvXsWCC9xrXsKd4FyS8kM?utm_source=generator&theme=0" width="100%" height="80" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>""",
+        height=85
+    )
 
 # =============================================================================
 # 4. FUNÇÕES UTILITÁRIAS
@@ -268,7 +274,12 @@ st.markdown("""
         background: linear-gradient(90deg, #2563EB 0%, #7C3AED 100%);
         color: white; border: none; font-weight: 600; border-radius: 8px;
     }
-    .footer-credits { text-align: center; margin-top: 40px; color: #6B7280; font-size: 12px; }
+    /* Estilo do Rodapé */
+    .footer-credits { 
+        text-align: center; margin-top: 30px; padding-top: 20px;
+        border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 11px; 
+    }
+    .footer-credits strong { color: #E0E0E0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -290,18 +301,16 @@ def add_xp(amount):
     st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
 
 # =============================================================================
-# 7. APLICAÇÃO
+# 7. SIDEBAR COMPLETA
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
     
-    # -----------------------------------------------
-    # NOVO: POMODORO FLUTUANTE (VISÍVEL SEMPRE)
-    # -----------------------------------------------
-    render_sidebar_pomodoro()
+    # >>> WIDGETS: TIMER + MÚSICA <<<
+    render_sidebar_widgets()
     st.markdown("---")
-    # -----------------------------------------------
-
+    
+    # STATUS IA
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
     else: st.success(f"🟢 **{status_msg}**")
@@ -314,9 +323,22 @@ with st.sidebar:
         "🎙️ Transcrição"
     ], label_visibility="collapsed")
     
+    # BARRA DE XP
     st.markdown("---")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
-    st.markdown("""<div class='footer-credits'>Arthur Carmélio</div>""", unsafe_allow_html=True)
+    
+    # >>> CRÉDITOS DO DESENVOLVEDOR <<<
+    st.markdown("""
+    <div class='footer-credits'>
+        Desenvolvido por<br>
+        <strong>Arthur Carmélio</strong><br>
+        © 2024 Carmélio AI
+    </div>
+    """, unsafe_allow_html=True)
+
+# =============================================================================
+# 8. MÓDULOS PRINCIPAIS
+# =============================================================================
 
 # --- 1. CHAT ---
 if menu == "✨ Chat Inteligente":
@@ -336,7 +358,7 @@ if menu == "✨ Chat Inteligente":
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. CONTRATO ---
+# --- 2. CONTRATOS ---
 elif menu == "📝 Gere seu Contrato":
     step = st.session_state.contract_step
     c1, c2, c3 = st.columns([1,1,1])
@@ -390,21 +412,16 @@ elif menu == "📝 Gere seu Contrato":
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
-    # 1. TEXTO DE BOAS-VINDAS (RESTAURADO)
+    # ONBOARDING (Explicação inicial)
     if not st.session_state.edital_text:
         st.markdown("""
         ### 🚀 Seu Professor Particular de Concursos
-        Bem-vindo ao Mestre dos Editais. Esta ferramenta transforma aquele PDF chato em um **Simulador de Prova**.
+        Bem-vindo ao **Mestre dos Editais**.
         
-        **Para que serve?**
-        * **Estudar:** Gera questões inéditas focadas no seu edital.
-        * **Treinar:** Simula o ambiente de prova (sem saber a resposta antes).
-        * **Aprender:** A IA corrige e explica o porquê de cada erro.
-        
-        **Como usar?**
-        1. Clique abaixo em "Carregar PDF" e envie seu edital.
-        2. Escolha a dificuldade e o tema.
-        3. Responda as questões e suba de nível!
+        **Como usar:**
+        1. Faça upload do seu Edital PDF.
+        2. A IA lê o conteúdo programático.
+        3. Você responde questões e treina para a prova!
         """)
         
     def gerar_turbo(dificuldade, foco):
@@ -425,7 +442,6 @@ elif menu == "🎯 Mestre dos Editais":
             if data: st.session_state.quiz_data = data
             else: st.error("Erro rápido. Tente de novo.")
 
-    # UPLOAD
     if not st.session_state.edital_text:
         f = st.file_uploader("Carregar Edital (PDF)", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
@@ -436,8 +452,6 @@ elif menu == "🎯 Mestre dos Editais":
                     st.session_state.edital_filename = f.name
                     st.rerun()
                 else: st.error("PDF sem texto.")
-    
-    # TREINO
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
