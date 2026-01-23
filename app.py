@@ -181,7 +181,7 @@ def render_sidebar_widgets():
                     'playsinline': 1,
                     'controls': 0,
                     'loop': 1, // Loop Infinito
-                    'playlist': 'jfKfPfyJRdk' // Necessário para loop funcionar
+                    'playlist': 'jfKfPfyJRdk'
                 },
                 events: {
                     'onReady': onPlayerReady
@@ -190,8 +190,7 @@ def render_sidebar_widgets():
         }
 
         function onPlayerReady(event) {
-            // Player pronto, mas espera clique para tocar (política de browsers)
-            // event.target.setVolume(50);
+            // Player pronto
         }
 
         function playMusic() {
@@ -487,8 +486,39 @@ elif menu == "📝 Gere seu Contrato":
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
+    # 1. TEXTO DE BOAS-VINDAS RESTAURADO (AQUI!)
     if not st.session_state.edital_text:
-        st.markdown("### 🚀 Professor de Edital"); f = st.file_uploader("PDF", type=["pdf"])
+        st.markdown("""
+        ### 🚀 Seu Professor Particular de Concursos
+        Bem-vindo ao **Mestre dos Editais**.
+        
+        **Como usar:**
+        1. Faça upload do seu Edital PDF.
+        2. A IA lê o conteúdo programático.
+        3. Você responde questões e treina para a prova!
+        """)
+
+    def gerar_turbo(dificuldade, foco):
+        st.session_state.quiz_data = None
+        st.session_state.quiz_show_answer = False
+        st.session_state.user_choice = None
+        with st.spinner(f"⚡ Gerando questão rápida ({dificuldade})..."):
+            tema = f"FOCO: {foco}." if foco else "Tema aleatório do CONTEÚDO."
+            texto_reduzido = st.session_state.edital_text[:15000]
+            prompt = f"""
+            Role: Banca Examinadora. Task: Criar questão técnica baseada no edital.
+            IGNORE: Datas, regras admin. USE: Conteúdo Programático/Leis.
+            {tema} Nível: {dificuldade}.
+            JSON Output: {{"materia": "...", "enunciado": "...", "alternativas": {{"A":"...","B":"...","C":"...","D":"..."}}, "correta": "A", "explicacao": "..."}}
+            """
+            res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{texto_reduzido}", json_mode=True)
+            data = extract_json_surgical(res)
+            if data: st.session_state.quiz_data = data
+            else: st.error("Erro rápido. Tente de novo.")
+
+    # UPLOAD
+    if not st.session_state.edital_text:
+        f = st.file_uploader("Carregar Edital (PDF)", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
@@ -497,6 +527,8 @@ elif menu == "🎯 Mestre dos Editais":
                     st.session_state.edital_filename = f.name
                     st.rerun()
                 else: st.error("PDF sem texto.")
+    
+    # TREINO
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -510,20 +542,14 @@ elif menu == "🎯 Mestre dos Editais":
         with ca:
             st.write(""); st.write("")
             if st.button("🔥 GERAR", type="primary", use_container_width=True):
-                st.session_state.quiz_data = None
-                st.session_state.quiz_show_answer = False
-                with st.spinner("⚡ Gerando..."):
-                    tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-                    txt = st.session_state.edital_text[:15000]
-                    res = call_gemini("JSON Only.", f"Role: Banca. Task: Questão técnica. IGNORE: Datas/Regras. {tema} Nível: {diff}. JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}\nEDITAL:\n{txt}", json_mode=True)
-                    data = extract_json_surgical(res)
-                    if data: st.session_state.quiz_data = data; st.rerun()
-                    else: st.error("Erro.")
+                gerar_turbo(diff, foco)
+                st.rerun()
 
         if st.session_state.quiz_data:
             q = st.session_state.quiz_data
             st.markdown(f"### 📚 {q.get('materia','Geral')}")
             st.info(q['enunciado'])
+            
             opts = q['alternativas']
             if not st.session_state.quiz_show_answer:
                 c1,c2 = st.columns(2)
@@ -536,18 +562,14 @@ elif menu == "🎯 Mestre dos Editais":
                 for l,t in opts.items():
                     icon = "✅" if l==c else ("❌" if l==u else "⬜")
                     st.write(f"{icon} **{l})** {t}")
+                
                 if u==c: st.success("Acertou!"); add_xp(50)
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
+                
                 if st.button("➡️ Próxima Rápida", type="primary"):
-                    st.session_state.quiz_data = None
-                    st.session_state.quiz_show_answer = False
-                    with st.spinner("⚡"):
-                        tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-                        txt = st.session_state.edital_text[:15000]
-                        res = call_gemini("JSON Only.", f"Role: Banca. Task: Questão técnica. IGNORE: Datas/Regras. {tema} Nível: {diff}. JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}\nEDITAL:\n{txt}", json_mode=True)
-                        data = extract_json_surgical(res)
-                        if data: st.session_state.quiz_data = data; st.rerun()
+                    gerar_turbo(diff, foco)
+                    st.rerun()
 
 # --- 4. EXTRAS ---
 elif menu == "🏢 Cartório OCR": st.title("🏢 OCR"); st.file_uploader("Arquivo")
