@@ -70,7 +70,6 @@ def get_best_model():
     try:
         genai.configure(api_key=api_key)
         
-        # Tenta listar modelos
         try:
             models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except:
@@ -122,13 +121,27 @@ def extract_json_surgical(text):
     return None
 
 # =============================================================================
-# 5. MANIPULAÇÃO DE ARQUIVOS
+# 5. MANIPULAÇÃO DE ARQUIVOS (OTIMIZADO V39.1)
 # =============================================================================
 def read_pdf_safe(file_obj):
     if not pdfplumber: return "Erro: Biblioteca PDF ausente."
     try:
+        text_content = ""
         with pdfplumber.open(BytesIO(file_obj.getvalue())) as pdf:
-            return "".join([p.extract_text() or "" for p in pdf.pages])
+            # Lê no máximo 50 páginas para evitar travar em arquivos gigantes
+            max_pages = 50
+            total_pages = len(pdf.pages)
+            pages_to_read = min(total_pages, max_pages)
+            
+            for i in range(pages_to_read):
+                page_text = pdf.pages[i].extract_text()
+                if page_text:
+                    text_content += page_text + "\n"
+                    
+        if not text_content.strip():
+            return None # Retorna None se for PDF Scaneado (Imagem)
+            
+        return text_content
     except Exception as e: return f"Erro PDF: {str(e)}"
 
 def markdown_to_docx(doc_obj, text):
@@ -188,6 +201,7 @@ if "contract_clauses" not in st.session_state: st.session_state.contract_clauses
 if "contract_meta" not in st.session_state: st.session_state.contract_meta = {}
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
 if "edital_text" not in st.session_state: st.session_state.edital_text = ""
+if "edital_warning" not in st.session_state: st.session_state.edital_warning = None
 
 # Estados do Quiz
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = None
@@ -328,32 +342,46 @@ elif menu == "📝 Gere seu Contrato":
                     ans = call_gemini("Revisor.", f"Texto: {full_text}\nPedido: {q}")
                     st.write(ans)
 
-# --- 3. MESTRE DOS EDITAIS (AGORA INTERATIVO E CORRIGIDO) ---
+# --- 3. MESTRE DOS EDITAIS (PROTEGIDO) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
     # 1. Onboarding
-    if not st.session_state.edital_text:
+    if not st.session_state.edital_text and not st.session_state.edital_warning:
         st.markdown("""
         ### 🚀 Transforme seu Edital em um Professor
         **Passo a passo:**
-        1. Faça upload do Edital (PDF).
+        1. Faça upload do Edital (PDF de Texto).
         2. O sistema vai ler as matérias.
         3. Você gera questões e treina como se estivesse na prova.
         """)
+    
+    # Aviso de Erro (se houver)
+    if st.session_state.edital_warning:
+        st.warning(st.session_state.edital_warning)
     
     # 2. Área de Upload (Expander)
     with st.expander("📂 Carregar/Trocar Edital", expanded=not bool(st.session_state.edital_text)):
         f = st.file_uploader("Upload do PDF", type=["pdf"])
         if f:
-            with st.spinner("Lendo conteúdo programático..."):
-                st.session_state.edital_text = read_pdf_safe(f)
-                st.session_state.quiz_data = None 
-                st.session_state.quiz_show_answer = False
-            st.success("Edital carregado! Pode fechar esta aba.")
+            with st.spinner("Lendo (Máx 50 págs)..."):
+                # Limpa estados anteriores
+                st.session_state.edital_text = ""
+                st.session_state.edital_warning = None
+                
+                texto = read_pdf_safe(f)
+                
+                if texto and len(texto) > 100:
+                    st.session_state.edital_text = texto
+                    st.session_state.quiz_data = None 
+                    st.session_state.quiz_show_answer = False
+                    st.success("Edital carregado com sucesso!")
+                else:
+                    st.session_state.edital_warning = "⚠️ **Atenção:** Não consegui ler texto neste PDF. Ele parece ser uma **imagem escaneada**. Por favor, use um PDF pesquisável (onde você consegue selecionar o texto)."
+            
             st.rerun()
 
-    # 3. Área de Treino (Visível apenas se tiver edital)
+    # 3. Área de Treino
     if st.session_state.edital_text:
         st.markdown("---")
         
@@ -373,7 +401,7 @@ elif menu == "🎯 Mestre dos Editais":
                     prompt = f"""
                     Aja como Banca Examinadora. Analise o edital.
                     Crie questão múltipla escolha {dificuldade} {tema_prompt}.
-                    Texto edital: {st.session_state.edital_text[:30000]}
+                    Texto edital: {st.session_state.edital_text[:25000]}
                     
                     REGRAS:
                     1. Gere 4 alternativas (A, B, C, D).
@@ -473,4 +501,7 @@ elif menu == "🍅 Sala de Foco":
 
 # --- 5. EXTRAS ---
 elif menu == "🏢 Cartório OCR":
-    st.title("🏢 OCR"); st.file
+    st.title("🏢 OCR"); st.file_uploader("Arquivo")
+
+elif menu == "🎙️ Transcrição":
+    st.title("🎙️ Transcrição"); st.file_uploader("Áudio")
