@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# 2. IMPORTAÇÕES SEGURAS
+# 2. IMPORTAÇÕES SEGURAS (BLINDAGEM CONTRA ERROS)
 # =============================================================================
 try: from groq import Groq
 except ImportError: Groq = None
@@ -42,10 +42,12 @@ try: from openai import OpenAI
 except ImportError: OpenAI = None
 
 # =============================================================================
-# 3. FUNÇÕES (MOTOR)
+# 3. DEFINIÇÃO DE FUNÇÕES (MOTOR DO SISTEMA)
 # =============================================================================
+# As funções ficam AQUI EM CIMA para evitar o erro "NameError"
 
 def safe_image_show(image_path):
+    """Mostra a logo sem quebrar em versões diferentes do Streamlit."""
     if os.path.exists(image_path):
         try:
             st.image(image_path, use_container_width=True)
@@ -55,6 +57,7 @@ def safe_image_show(image_path):
         st.markdown("## ⚖️ Carmélio AI")
 
 def get_audio_input_safe(label):
+    """Verifica se dá pra gravar áudio. Se não der, avisa e pede upload."""
     if hasattr(st, "audio_input"):
         return st.audio_input(label)
     else:
@@ -62,9 +65,10 @@ def get_audio_input_safe(label):
         return None
 
 def check_rate_limit():
+    """Evita que o usuário clique rápido demais e trave a API."""
     if "last_call" not in st.session_state: st.session_state.last_call = 0
     now = time.time()
-    if now - st.session_state.last_call < 1.0: 
+    if now - st.session_state.last_call < 1.5: 
         return True
     return False
 
@@ -75,6 +79,7 @@ def mark_call():
 def get_ai_clients():
     clients = {"groq": None, "gemini": None, "openai": None}
     
+    # Tenta pegar chaves do secrets ou ambiente
     groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
     if groq_key and Groq: clients["groq"] = Groq(api_key=groq_key)
     
@@ -89,6 +94,7 @@ def get_ai_clients():
     return clients
 
 def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False):
+    """Função única que chama a IA correta."""
     if check_rate_limit(): return None
     mark_call()
     
@@ -128,6 +134,7 @@ def call_ai_unified(system_prompt, user_prompt, provider="groq", json_mode=False
     return "Provedor desconhecido."
 
 def extract_json_surgical(text):
+    """Garante que pegamos o JSON mesmo se a IA falar antes."""
     try:
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: return json.loads(match.group(0))
@@ -143,6 +150,7 @@ def read_pdf_safe(file_obj):
     except Exception as e: return f"Erro PDF: {str(e)}"
 
 def markdown_to_docx(doc_obj, text):
+    """Converte formatação básica para Word."""
     if not text: return
     for line in text.split('\n'):
         line = line.strip()
@@ -156,13 +164,16 @@ def create_contract_docx(clauses, meta):
     doc = Document()
     doc.add_heading(meta.get('tipo', 'CONTRATO').upper(), 0)
     doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y')}")
+    
     doc.add_heading("1. QUALIFICAÇÃO", level=1)
     doc.add_paragraph(meta.get('partes', ''))
     doc.add_heading("2. DO OBJETO", level=1)
     doc.add_paragraph(meta.get('objeto', ''))
+    
     for clause in clauses:
         doc.add_heading(clause.get('titulo', 'Cláusula'), level=1)
         markdown_to_docx(doc, clause.get('conteudo', ''))
+        
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -260,7 +271,9 @@ if menu == "✨ Chat Inteligente":
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Pesquisando..."):
                 ctx_msgs = st.session_state.chat_history[-6:]
+                # Adaptação para envio como string única
                 ctx_str = "\n".join([f"{m['role']}: {m['content']}" for m in ctx_msgs])
+                
                 res = call_ai_unified(
                     "Você é o Carmélio AI, um jurista sênior brasileiro. Cite leis (CF/88, CC, CPC) e seja didático.", 
                     ctx_str, 
