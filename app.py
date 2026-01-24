@@ -52,7 +52,8 @@ for k, v in keys.items():
 
 def check_rate_limit():
     """Evita chamadas excessivas (proteção simples)."""
-    if time.time() - st.session_state.last_call < 1.0: return True 
+    # Aumentei para 2 segundos para evitar o erro 429
+    if time.time() - st.session_state.last_call < 2.0: return True 
     return False
 
 def mark_call(): st.session_state.last_call = time.time()
@@ -70,7 +71,7 @@ def get_best_model():
         genai.configure(api_key=api_key)
         try: models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except: return None, "Erro de Chave API"
-        # Prioriza Flash (Rápido) > Pro (Robusto)
+        # Prioriza Flash (Rápido e janela de contexto GIGANTE para editais)
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         escolhido = next((m for m in pref if m in models), models[0] if models else None)
         
@@ -80,16 +81,16 @@ def get_best_model():
     except Exception as e: return None, f"Erro Fatal: {str(e)}"
 
 def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_search=False):
-    """
-    Função central de comunicação com a IA.
-    Agora suporta 'use_search=True' para conectar ao Google.
-    """
-    if check_rate_limit(): return None
+    """Função central de comunicação com a IA."""
+    if check_rate_limit(): 
+        time.sleep(1) # Espera um pouco se estiver muito rápido
+    
     mark_call()
     model, name = get_best_model()
     if not model: return f"Erro: {name}"
+    
     try:
-        # Configuração de Ferramentas (Google Search)
+        # Configuração de Ferramentas (Google Search) - Híbrido
         tools_config = 'google_search_retrieval' if use_search else None
         
         if image:
@@ -98,18 +99,20 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_sea
             full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
             if json_mode: full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
             
-            # Chama com ou sem ferramentas de busca
             if tools_config:
                 try:
                     response = model.generate_content(full_prompt, tools=tools_config)
                 except:
-                    # Fallback se a conta não suportar busca (volta para offline)
+                    # Fallback se a conta não suportar busca
                     response = model.generate_content(full_prompt)
             else:
                 response = model.generate_content(full_prompt)
                 
         return response.text
-    except Exception as e: return f"Erro IA: {str(e)}"
+    except Exception as e: 
+        if "429" in str(e):
+            return "⚠️ Limite de velocidade atingido. Aguarde 30 segundos e tente novamente."
+        return f"Erro IA: {str(e)}"
 
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
@@ -121,13 +124,16 @@ def extract_json_surgical(text):
     return None
 
 def read_pdf_safe(file_obj):
-    """Lê PDF e retorna texto. Limita a 60 pgs para performance."""
+    """Lê PDF e retorna texto."""
     if not pdfplumber: return None
     try:
         text = ""
         with pdfplumber.open(BytesIO(file_obj.getvalue())) as pdf:
+            # CORREÇÃO CRÍTICA: Aumentei para 300 páginas.
+            # Editais colocam o conteúdo lá no final (Anexos).
+            # O Gemini 1.5 Flash aguenta isso tranquilo.
             for i, p in enumerate(pdf.pages):
-                if i >= 60: break
+                if i >= 300: break 
                 text += (p.extract_text() or "") + "\n"
         return text if text.strip() else None
     except: return None
@@ -319,11 +325,11 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# --- 1. CHAT (AGORA COM GOOGLE) ---
+# --- 1. CHAT (COM GOOGLE HÍBRIDO) ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
-        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Agora estou conectado ao Google para buscar jurisprudências e leis atualizadas.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
     if p := st.chat_input("Digite..."):
@@ -332,13 +338,13 @@ if menu == "✨ Chat Inteligente":
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Pesquisando e analisando..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                # AQUI ESTÁ A MÁGICA: use_search=True apenas aqui!
+                # ATIVA O MODO ONLINE (use_search=True)
                 res = call_gemini("Advogado Sênior. Use informações atualizadas.", history, use_search=True)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. CONTRATOS (SEM GOOGLE) ---
+# --- 2. CONTRATOS ---
 elif menu == "📝 Gere seu Contrato":
     st.title("📝 Gere seu Contrato")
     step = st.session_state.contract_step
@@ -369,7 +375,7 @@ elif menu == "📝 Gere seu Contrato":
                             st.session_state.contract_step = 2
                             add_xp(25)
                             st.rerun()
-                        else: st.error("Erro.")
+                        else: st.error("Erro ao gerar.")
     elif step == 2:
         st.header("📑 Revisão"); 
         if st.button("➕ Cláusula"): st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."}); st.rerun()
@@ -391,7 +397,7 @@ elif menu == "📝 Gere seu Contrato":
         if docx: st.download_button("💾 Baixar DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
         if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
 
-# --- 3. MÓDULO EDITAIS (SEM GOOGLE - SEGURANÇA) ---
+# --- 3. MESTRE DOS EDITAIS (CORRIGIDO: 300 PÁGINAS + PROMPT AGRESSIVO) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
@@ -409,27 +415,31 @@ elif menu == "🎯 Mestre dos Editais":
         st.session_state.quiz_show_answer = False
         with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
             tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-            txt = st.session_state.edital_text[:15000]
+            # AGORA ELE LÊ TUDO O QUE FOI CAPTURADO (ATÉ 300 PAGINAS)
+            txt = st.session_state.edital_text
             
-            # Prompt Agressivo Anti-Burocracia
+            # PROMPT SNIPER: IGNORA REGRAS
             prompt = f"""
             Role: Banca Examinadora.
             TASK: Criar questão técnica de múltipla escolha.
             CRITICAL: IGNORE TOTALMENTE datas, inscrições, taxas, isenções, locais de prova e vagas.
-            SOURCE: Use APENAS o 'CONTEÚDO PROGRAMÁTICO' ou 'CONHECIMENTOS ESPECÍFICOS'.
+            SOURCE: Busque APENAS nos ANEXOS de 'CONTEÚDO PROGRAMÁTICO' ou 'CONHECIMENTOS ESPECÍFICOS'.
             {tema} Nível: {dificuldade}.
             JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}
             """
             
             res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{txt}", json_mode=True)
-            data = extract_json_surgical(res)
-            if data: st.session_state.quiz_data = data
-            else: st.error("Erro rápido.")
+            if "Limite de velocidade" in res:
+                st.error(res)
+            else:
+                data = extract_json_surgical(res)
+                if data: st.session_state.quiz_data = data
+                else: st.error("Erro rápido.")
 
     if not st.session_state.edital_text:
         f = st.file_uploader("Upload PDF", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
-            with st.spinner("Lendo..."):
+            with st.spinner("Lendo (pode demorar um pouco se for grande)..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
                 else: st.error("PDF sem texto.")
@@ -489,8 +499,11 @@ elif menu == "🏢 Cartório OCR":
         if st.button("🔍 Extrair Texto", type="primary"):
             with st.spinner("Lendo documento..."):
                 res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o texto com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
-                st.session_state.ocr_text = res
-                add_xp(30)
+                if "Limite de velocidade" in res:
+                    st.error(res)
+                else:
+                    st.session_state.ocr_text = res
+                    add_xp(30)
     
     if st.session_state.ocr_text:
         st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
