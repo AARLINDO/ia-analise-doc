@@ -79,19 +79,35 @@ def get_best_model():
         return None, "Nenhum modelo compatível."
     except Exception as e: return None, f"Erro Fatal: {str(e)}"
 
-def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
-    """Função central de comunicação com a IA."""
+def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_search=False):
+    """
+    Função central de comunicação com a IA.
+    Agora suporta 'use_search=True' para conectar ao Google.
+    """
     if check_rate_limit(): return None
     mark_call()
     model, name = get_best_model()
     if not model: return f"Erro: {name}"
     try:
+        # Configuração de Ferramentas (Google Search)
+        tools_config = 'google_search_retrieval' if use_search else None
+        
         if image:
             response = model.generate_content([system_prompt, image, user_prompt])
         else:
             full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
             if json_mode: full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
-            response = model.generate_content(full_prompt)
+            
+            # Chama com ou sem ferramentas de busca
+            if tools_config:
+                try:
+                    response = model.generate_content(full_prompt, tools=tools_config)
+                except:
+                    # Fallback se a conta não suportar busca (volta para offline)
+                    response = model.generate_content(full_prompt)
+            else:
+                response = model.generate_content(full_prompt)
+                
         return response.text
     except Exception as e: return f"Erro IA: {str(e)}"
 
@@ -303,25 +319,26 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# --- 1. CHAT ---
+# --- 1. CHAT (AGORA COM GOOGLE) ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
-        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência?</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Agora estou conectado ao Google para buscar jurisprudências e leis atualizadas.</p></div>""", unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
     if p := st.chat_input("Digite..."):
         st.session_state.chat_history.append({"role": "user", "content": p})
         with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
         with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Analisando..."):
+            with st.spinner("Pesquisando e analisando..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                res = call_gemini("Advogado Sênior. Responda em Português do Brasil.", history)
+                # AQUI ESTÁ A MÁGICA: use_search=True apenas aqui!
+                res = call_gemini("Advogado Sênior. Use informações atualizadas.", history, use_search=True)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. CONTRATOS ---
+# --- 2. CONTRATOS (SEM GOOGLE) ---
 elif menu == "📝 Gere seu Contrato":
     st.title("📝 Gere seu Contrato")
     step = st.session_state.contract_step
@@ -374,7 +391,7 @@ elif menu == "📝 Gere seu Contrato":
         if docx: st.download_button("💾 Baixar DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
         if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
 
-# --- 3. MESTRE DOS EDITAIS (CORRIGIDO PARA FOCAR NA MATÉRIA) ---
+# --- 3. MÓDULO EDITAIS (SEM GOOGLE - SEGURANÇA) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
@@ -391,33 +408,23 @@ elif menu == "🎯 Mestre dos Editais":
         st.session_state.quiz_data = None
         st.session_state.quiz_show_answer = False
         with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
-            tema = f"sobre: {foco}" if foco else "sobre um tópico aleatório do CONTEÚDO PROGRAMÁTICO"
+            tema = f"FOCO: {foco}." if foco else "Tema aleatório."
+            txt = st.session_state.edital_text[:15000]
             
-            # --- O PULO DO GATO: PROMPT AGRESSIVO ---
+            # Prompt Agressivo Anti-Burocracia
             prompt = f"""
-            ATUE COMO: Banca Examinadora de Concurso.
-            OBJETIVO: Criar uma questão técnica de múltipla escolha.
-            
-            REGRAS CRÍTICAS DE EXCLUSÃO (O QUE NÃO FAZER):
-            - PROIBIDO perguntar sobre datas de inscrição, taxas, isenção ou local de prova.
-            - PROIBIDO perguntar sobre número de vagas, testes físicos ou exames médicos.
-            - PROIBIDO perguntar sobre regras administrativas do edital.
-            
-            O QUE FAZER (OBRIGATÓRIO):
-            - Varra o texto buscando SOMENTE o "CONTEÚDO PROGRAMÁTICO" ou "CONHECIMENTOS ESPECÍFICOS".
-            - Crie uma questão de: Direito (Constitucional, Penal, Adm), Português, Informática ou Legislação Específica.
-            - Nível: {dificuldade}.
-            - Foco {tema}.
-            
-            SAÍDA JSON: {{'materia':'...', 'enunciado':'...', 'alternativas':{{'A':'...','B':'...','C':'...','D':'...'}}, 'correta':'A', 'explicacao':'...'}}
+            Role: Banca Examinadora.
+            TASK: Criar questão técnica de múltipla escolha.
+            CRITICAL: IGNORE TOTALMENTE datas, inscrições, taxas, isenções, locais de prova e vagas.
+            SOURCE: Use APENAS o 'CONTEÚDO PROGRAMÁTICO' ou 'CONHECIMENTOS ESPECÍFICOS'.
+            {tema} Nível: {dificuldade}.
+            JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}
             """
             
-            txt = st.session_state.edital_text[:20000] # Aumentei um pouco o contexto
-            res = call_gemini(prompt, f"Analise este texto de edital e gere a questão:\n\n{txt}", json_mode=True)
+            res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{txt}", json_mode=True)
             data = extract_json_surgical(res)
-            
             if data: st.session_state.quiz_data = data
-            else: st.error("Erro ao gerar questão. Tente novamente.")
+            else: st.error("Erro rápido.")
 
     if not st.session_state.edital_text:
         f = st.file_uploader("Upload PDF", type=["pdf"])
@@ -425,7 +432,7 @@ elif menu == "🎯 Mestre dos Editais":
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto (imagem).")
+                else: st.error("PDF sem texto.")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -434,7 +441,7 @@ elif menu == "🎯 Mestre dos Editais":
         cc, ca = st.columns([2, 1])
         with cc:
             diff = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
-            foco = st.text_input("Foco:", placeholder="Ex: Penal, Crase, Excel...")
+            foco = st.text_input("Foco:", placeholder="Ex: Penal")
         with ca:
             st.write(""); st.write("")
             if st.button("🔥 GERAR", type="primary", use_container_width=True): gerar_turbo(diff, foco); st.rerun()
