@@ -19,12 +19,11 @@ st.set_page_config(
 )
 
 # =============================================================================
-# 2. IMPORTAÇÕES COM TRATAMENTO DE ERROS
+# 2. IMPORTAÇÕES E SETUP
 # =============================================================================
 try: 
     import google.generativeai as genai
-except ImportError: 
-    genai = None
+except ImportError: genai = None
 
 try: import pdfplumber
 except ImportError: pdfplumber = None
@@ -32,181 +31,56 @@ except ImportError: pdfplumber = None
 try: 
     import docx
     from docx import Document
-except ImportError: 
-    docx = None
-    Document = None
+except ImportError: docx = None; Document = None
 
 try: from PIL import Image
 except ImportError: Image = None
 
-# =============================================================================
-# 3. MÓDULO DE INTERFACE (SIDEBAR, WIDGETS E DEVOCIONAL)
-# =============================================================================
-
-def get_daily_verse():
-    """Retorna um versículo baseado no dia do ano (sempre o mesmo no dia)."""
-    versiculos = [
-        {"ref": "Josué 1:9", "txt": "Não fui eu que ordenei a você? Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar."},
-        {"ref": "Filipenses 4:13", "txt": "Tudo posso naquele que me fortalece."},
-        {"ref": "Salmos 37:5", "txt": "Entregue o seu caminho ao Senhor; confie nele, e ele agirá."},
-        {"ref": "Isaías 41:10", "txt": "Por isso não tema, pois estou com você; não tenha medo, pois sou o seu Deus. Eu o fortalecerei e o ajudarei; eu o segurarei com a minha mão direita vitoriosa."},
-        {"ref": "Jeremias 29:11", "txt": "Porque sou eu que conheço os planos que tenho para vocês', diz o Senhor, 'planos de fazê-los prosperar e não de causar dano, planos de dar a vocês esperança e um futuro."},
-        {"ref": "Provérbios 16:3", "txt": "Consagre ao Senhor tudo o que você faz, e os seus planos serão bem-sucedidos."},
-        {"ref": "Salmos 121:1-2", "txt": "Levanto os meus olhos para os montes e pergunto: De onde me vem o socorro? O meu socorro vem do Senhor, que fez os céus e a terra."},
-        {"ref": "2 Timóteo 1:7", "txt": "Pois Deus não nos deu espírito de covardia, mas de poder, de amor e de equilíbrio."},
-        {"ref": "Salmos 23:1", "txt": "O Senhor é o meu pastor; de nada terei falta."},
-        {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas lhes serão acrescentadas."},
-        {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças. Voam alto como águias; correm e não ficam exaustos, andam e não se cansam."},
-        {"ref": "Tiago 1:5", "txt": "Se algum de vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade; e lhe será concedida."},
-        {"ref": "Salmos 119:105", "txt": "A tua palavra é lâmpada que ilumina os meus passos e luz que clareia o meu caminho."},
-        {"ref": "Romanos 8:31", "txt": "Que diremos, pois, diante dessas coisas? Se Deus é por nós, quem será contra nós?"},
-        {"ref": "Provérbios 2:6", "txt": "Pois o Senhor é quem dá sabedoria; de sua boca procedem o conhecimento e o discernimento."}
-    ]
-    # Usa a data de hoje como "semente" para escolher o versículo
-    random.seed(date.today().toordinal())
-    return random.choice(versiculos)
-
-def render_sidebar_widgets():
-    """
-    Renderiza os Widgets de Foco (Timer Pomodoro e Player de Música)
-    utilizando HTML/JS injetado para não travar o loop do Python.
-    """
-    
-    # 1. RECUPERA O VERSÍCULO DO DIA
-    v = get_daily_verse()
-    
-    # Estilos CSS
-    sidebar_html = f"""
-    <style>
-        .widget-box {{
-            background-color: #1F2430; border: 1px solid #374151;
-            border-radius: 12px; padding: 15px; text-align: center;
-            color: white; font-family: sans-serif; margin-bottom: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }}
-        .devotional-box {{
-            background: linear-gradient(135deg, #1e293b, #0f172a);
-            border-left: 4px solid #F59E0B; /* Dourado */
-            text-align: left; padding: 12px; margin-bottom: 20px;
-            border-radius: 8px;
-        }}
-        .verse-text {{ font-style: italic; font-size: 13px; color: #E2E8F0; margin-bottom: 8px; line-height: 1.4; }}
-        .verse-ref {{ font-size: 11px; font-weight: bold; color: #F59E0B; text-align: right; }}
-        
-        .title {{ font-size: 12px; font-weight: bold; color: #8B949E; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }}
-        .time-display {{ font-size: 36px; font-weight: 800; margin: 10px 0; color: #4285F4; text-shadow: 0 0 10px rgba(66, 133, 244, 0.3); }}
-        .btn {{ border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin: 3px; font-size: 12px; font-weight: 600; transition: all 0.2s; }}
-        .btn:hover {{ opacity: 0.9; transform: scale(1.05); }}
-        .btn-primary {{ background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; }}
-        .btn-danger {{ background: linear-gradient(135deg, #DC2626, #B91C1C); color: white; }}
-        .btn-warn {{ background: linear-gradient(135deg, #D97706, #B45309); color: white; }}
-        .btn-dark {{ background: #374151; color: #E5E7EB; border: 1px solid #4B5563; }}
-        .presets {{ margin-bottom: 10px; display: flex; justify-content: center; gap: 5px; }}
-        .preset-btn {{ background: transparent; border: 1px solid #4B5563; color: #9CA3AF; padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; }}
-        .preset-btn:hover {{ border-color: #60A5FA; color: #60A5FA; }}
-        .player-status {{ font-size: 11px; color: #34D399; margin-top: 5px; display: none; }}
-        iframe {{ display: none; }}
-    </style>
-    
-    <div class="devotional-box">
-        <div class="title" style="color:#F59E0B; margin-bottom:5px;">📖 Palavra do Dia</div>
-        <div class="verse-text">"{v['txt']}"</div>
-        <div class="verse-ref">{v['ref']}</div>
-    </div>
-    
-    <div class="widget-box">
-        <div class="title">🍅 Pomodoro Focus</div>
-        <div class="presets">
-            <button class="preset-btn" onclick="setTime(25)">25m</button>
-            <button class="preset-btn" onclick="setTime(50)">50m</button>
-            <button class="preset-btn" onclick="setTime(5)">5m</button>
-        </div>
-        <div class="time-display" id="timer">25:00</div>
-        <div id="pomo-status" style="font-size:11px; color:#6B7280; margin-bottom:10px;">Pronto</div>
-        <div>
-            <button class="btn btn-primary" onclick="startTimer()">▶ Iniciar</button>
-            <button class="btn btn-warn" onclick="pauseTimer()">⏸ Pausa</button>
-            <button class="btn btn-danger" onclick="resetTimer()">↺</button>
-        </div>
-    </div>
-
-    <div class="widget-box">
-        <div class="title">🎵 Rádio Lofi (24h)</div>
-        <div id="youtube-player"></div>
-        <div style="margin-top:10px;">
-            <button class="btn btn-dark" onclick="playMusic()">▶ Play</button>
-            <button class="btn btn-dark" onclick="pauseMusic()">⏸ Pause</button>
-            <button class="btn btn-dark" onclick="volUp()">🔊 +</button>
-            <button class="btn btn-dark" onclick="volDown()">🔉 -</button>
-        </div>
-        <div id="music-status" class="player-status">Tocando...</div>
-    </div>
-
-    <script>
-        let time = 25 * 60; let initialTime = 25 * 60; let interval = null;
-        const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-
-        function updateDisplay() {{
-            let m = Math.floor(time / 60); let s = time % 60;
-            document.getElementById('timer').innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-        }}
-        function setTime(mins) {{
-            pauseTimer(); time = mins * 60; initialTime = time; updateDisplay();
-            document.getElementById('pomo-status').innerText = mins + " min definido";
-        }}
-        function startTimer() {{
-            if (interval) return;
-            document.getElementById('pomo-status').innerText = "Focando...";
-            interval = setInterval(() => {{
-                if (time > 0) {{ time--; updateDisplay(); }} 
-                else {{ clearInterval(interval); interval = null; document.getElementById('timer').innerText = "00:00"; alarm.play(); document.getElementById('pomo-status').innerText = "Acabou!"; }}
-            }}, 1000);
-        }}
-        function pauseTimer() {{ clearInterval(interval); interval = null; document.getElementById('pomo-status').innerText = "Pausado"; }}
-        function resetTimer() {{ pauseTimer(); time = initialTime; updateDisplay(); document.getElementById('pomo-status').innerText = "Reiniciado"; }}
-
-        var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
-        var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-        var player;
-        function onYouTubeIframeAPIReady() {{
-            player = new YT.Player('youtube-player', {{
-                height: '0', width: '0', videoId: 'jfKfPfyJRdk',
-                playerVars: {{ 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk' }}
-            }});
-        }}
-        function playMusic() {{ if(player) {{ player.playVideo(); document.getElementById('music-status').style.display='block'; document.getElementById('music-status').innerText="Tocando 🎵"; }} }}
-        function pauseMusic() {{ if(player) {{ player.pauseVideo(); document.getElementById('music-status').innerText="Pausado"; }} }}
-        function volUp() {{ if(player) {{ player.setVolume(player.getVolume() + 10); }} }}
-        function volDown() {{ if(player) {{ player.setVolume(player.getVolume() - 10); }} }}
-    </script>
-    """
-    components.html(sidebar_html, height=520) # Aumentei altura para caber tudo
+# Inicialização de Estado (Session State)
+keys = {
+    "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
+    "contract_meta": {}, "chat_history": [], "edital_text": "", 
+    "edital_filename": "", "quiz_data": None, "quiz_show_answer": False, 
+    "user_choice": None, "ocr_text": "", "last_call": 0
+}
+for k, v in keys.items():
+    if k not in st.session_state: st.session_state[k] = v
 
 # =============================================================================
-# 4. FUNÇÕES DE IA & ARQUIVOS
+# 3. FUNÇÕES UTILITÁRIAS E LÓGICA (BACKEND)
 # =============================================================================
+
 def check_rate_limit():
-    if "last_call" not in st.session_state: st.session_state.last_call = 0
-    if time.time() - st.session_state.last_call < 0.5: return True 
+    """Evita chamadas excessivas (proteção simples)."""
+    if time.time() - st.session_state.last_call < 1.0: return True 
     return False
 
 def mark_call(): st.session_state.last_call = time.time()
 
+def add_xp(amount):
+    st.session_state.user_xp += amount
+    st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
+
 @st.cache_resource
 def get_best_model():
+    """Configura e retorna o melhor modelo Gemini disponível."""
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key: return None, "⚠️ Configure secrets.toml"
     try:
         genai.configure(api_key=api_key)
         try: models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except: return None, "Erro de Chave API"
+        # Prioriza Flash (Rápido) > Pro (Robusto)
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         escolhido = next((m for m in pref if m in models), models[0] if models else None)
-        if escolhido: return genai.GenerativeModel(escolhido.replace("models/", "")), escolhido.replace("models/", "")
+        
+        if escolhido: 
+            return genai.GenerativeModel(escolhido.replace("models/", "")), escolhido.replace("models/", "")
         return None, "Nenhum modelo compatível."
     except Exception as e: return None, f"Erro Fatal: {str(e)}"
 
 def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
+    """Função central de comunicação com a IA."""
     if check_rate_limit(): return None
     mark_call()
     model, name = get_best_model()
@@ -215,13 +89,14 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None):
         if image:
             response = model.generate_content([system_prompt, image, user_prompt])
         else:
-            full_prompt = f"SYS: {system_prompt}\nUSER: {user_prompt}"
-            if json_mode: full_prompt += "\nOutput JSON only."
+            full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
+            if json_mode: full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
             response = model.generate_content(full_prompt)
         return response.text
     except Exception as e: return f"Erro IA: {str(e)}"
 
 def extract_json_surgical(text):
+    """Extrai JSON de texto bagunçado."""
     try:
         text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
@@ -230,6 +105,7 @@ def extract_json_surgical(text):
     return None
 
 def read_pdf_safe(file_obj):
+    """Lê PDF e retorna texto. Limita a 60 pgs para performance."""
     if not pdfplumber: return None
     try:
         text = ""
@@ -269,19 +145,31 @@ def create_contract_docx(clauses, meta):
     buffer.seek(0)
     return buffer
 
+def get_daily_verse():
+    versiculos = [
+        {"ref": "Josué 1:9", "txt": "Seja forte e corajoso! Não se apavore nem desanime."},
+        {"ref": "Filipenses 4:13", "txt": "Tudo posso naquele que me fortalece."},
+        {"ref": "Salmos 37:5", "txt": "Entregue o seu caminho ao Senhor; confie nele, e ele agirá."},
+        {"ref": "Isaías 41:10", "txt": "Não tema, pois estou com você; não tenha medo, pois sou o seu Deus."},
+        {"ref": "Jeremias 29:11", "txt": "Tenho planos de fazê-los prosperar e não de causar dano."},
+        {"ref": "Provérbios 16:3", "txt": "Consagre ao Senhor tudo o que você faz, e os seus planos serão bem-sucedidos."},
+        {"ref": "Salmos 121:1", "txt": "Levanto os meus olhos para os montes e pergunto: De onde me vem o socorro?"},
+        {"ref": "2 Timóteo 1:7", "txt": "Deus não nos deu espírito de covardia, mas de poder, de amor e de equilíbrio."},
+        {"ref": "Salmos 23:1", "txt": "O Senhor é o meu pastor; de nada terei falta."},
+        {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças."},
+    ]
+    random.seed(date.today().toordinal())
+    return random.choice(versiculos)
+
+# =============================================================================
+# 4. INTERFACE GRÁFICA & CSS
+# =============================================================================
 def safe_image_show(image_path):
     if os.path.exists(image_path):
         try: st.image(image_path, use_container_width=True)
         except TypeError: st.image(image_path, use_column_width=True)
     else: st.markdown("## ⚖️ Carmélio AI")
 
-def add_xp(amount):
-    st.session_state.user_xp += amount
-    st.toast(f"+{amount} XP | Nível {int(st.session_state.user_xp/100)}", icon="⚡")
-
-# =============================================================================
-# 6. ESTILO E ESTADO
-# =============================================================================
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
@@ -307,22 +195,96 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicialização de Estado
-keys = {
-    "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
-    "contract_meta": {}, "chat_history": [], "edital_text": "", 
-    "edital_filename": "", "quiz_data": None, "quiz_show_answer": False, 
-    "user_choice": None, "ocr_text": ""
-}
-for k, v in keys.items():
-    if k not in st.session_state: st.session_state[k] = v
+def render_sidebar_widgets():
+    v = get_daily_verse()
+    html_code = f"""
+    <style>
+        .widget-box {{ background: #1F2430; border: 1px solid #374151; border-radius: 12px; padding: 12px; text-align: center; color: white; font-family: sans-serif; margin-bottom: 12px; }}
+        .devotional-box {{ background: linear-gradient(135deg, #1e293b, #0f172a); border-left: 4px solid #F59E0B; text-align: left; padding: 12px; margin-bottom: 15px; border-radius: 8px; }}
+        .verse-text {{ font-style: italic; font-size: 12px; color: #E2E8F0; margin-bottom: 5px; }}
+        .verse-ref {{ font-size: 10px; font-weight: bold; color: #F59E0B; text-align: right; }}
+        .time-display {{ font-size: 32px; font-weight: 800; margin: 8px 0; color: #4285F4; }}
+        .btn {{ border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; margin: 2px; font-size: 11px; color: white; }}
+        .btn-primary {{ background: #2563EB; }} .btn-warn {{ background: #D97706; }} .btn-danger {{ background: #DC2626; }} .btn-dark {{ background: #374151; border: 1px solid #4B5563; }}
+        iframe {{ display: none; }}
+    </style>
+    
+    <div class="devotional-box">
+        <div style="color:#F59E0B; font-size:11px; font-weight:bold; margin-bottom:4px;">📖 Palavra do Dia</div>
+        <div class="verse-text">"{v['txt']}"</div>
+        <div class="verse-ref">{v['ref']}</div>
+    </div>
+    
+    <div class="widget-box">
+        <div style="font-size:11px; font-weight:bold; color:#8B949E; margin-bottom:5px;">TOMATO FOCUS</div>
+        <div class="time-display" id="timer">25:00</div>
+        <div id="status" style="font-size:10px; color:#aaa; margin-bottom:8px;">Pronto</div>
+        <div>
+            <button class="btn btn-primary" onclick="startTimer()">▶</button>
+            <button class="btn btn-warn" onclick="pauseTimer()">⏸</button>
+            <button class="btn btn-danger" onclick="resetTimer()">↺</button>
+        </div>
+        <div style="margin-top:5px;">
+            <button class="btn btn-dark" onclick="setTime(25)" style="padding:2px 6px; font-size:9px;">25m</button>
+            <button class="btn btn-dark" onclick="setTime(50)" style="padding:2px 6px; font-size:9px;">50m</button>
+            <button class="btn btn-dark" onclick="setTime(5)" style="padding:2px 6px; font-size:9px;">5m</button>
+        </div>
+    </div>
+
+    <div class="widget-box">
+        <div style="font-size:11px; font-weight:bold; color:#8B949E; margin-bottom:5px;">RÁDIO LOFI 24H</div>
+        <div id="youtube-player"></div>
+        <button class="btn btn-dark" onclick="playMusic()">▶ Play</button>
+        <button class="btn btn-dark" onclick="pauseMusic()">⏸ Pause</button>
+        <button class="btn btn-dark" onclick="volUp()">+</button>
+        <button class="btn btn-dark" onclick="volDown()">-</button>
+        <div id="music-status" style="font-size:10px; color:#34D399; margin-top:5px; display:none;">Tocando 🎵</div>
+    </div>
+
+    <script>
+        // Lógica do Timer
+        let time = 25 * 60; let initialTime = 25 * 60; let interval = null;
+        const alarm = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+        function updateDisplay() {{
+            let m = Math.floor(time / 60); let s = time % 60;
+            document.getElementById('timer').innerText = (m<10?'0':'')+m + ':' + (s<10?'0':'')+s;
+        }}
+        function setTime(m) {{ pauseTimer(); time=m*60; initialTime=time; updateDisplay(); document.getElementById('status').innerText=m+" min"; }}
+        function startTimer() {{
+            if(interval) return;
+            document.getElementById('status').innerText="Focando...";
+            interval = setInterval(()=>{{
+                if(time>0) {{ time--; updateDisplay(); }}
+                else {{ clearInterval(interval); interval=null; document.getElementById('timer').innerText="00:00"; alarm.play(); document.getElementById('status').innerText="Acabou!"; }}
+            }}, 1000);
+        }}
+        function pauseTimer() {{ clearInterval(interval); interval=null; document.getElementById('status').innerText="Pausa"; }}
+        function resetTimer() {{ pauseTimer(); time=initialTime; updateDisplay(); }}
+
+        // Lógica do Youtube
+        var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        var player;
+        function onYouTubeIframeAPIReady() {{
+            player = new YT.Player('youtube-player', {{
+                height: '0', width: '0', videoId: 'jfKfPfyJRdk',
+                playerVars: {{ 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk' }}
+            }});
+        }}
+        function playMusic() {{ if(player) {{ player.playVideo(); document.getElementById('music-status').style.display='block'; }} }}
+        function pauseMusic() {{ if(player) {{ player.pauseVideo(); }} }}
+        function volUp() {{ if(player) player.setVolume(player.getVolume()+10); }}
+        function volDown() {{ if(player) player.setVolume(player.getVolume()-10); }}
+    </script>
+    """
+    components.html(html_code, height=550)
 
 # =============================================================================
-# 7. APLICAÇÃO PRINCIPAL (MAIN LOOP)
+# 5. EXECUÇÃO PRINCIPAL
 # =============================================================================
 with st.sidebar:
     safe_image_show("logo.jpg.png")
-    render_sidebar_widgets() # Widget HTML (DEVOCIONAL + TIMER + MÚSICA)
+    render_sidebar_widgets()
     st.markdown("---")
     
     model_obj, status_msg = get_best_model()
@@ -341,7 +303,7 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# --- 1. MÓDULO CHAT ---
+# --- 1. CHAT ---
 if menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
@@ -359,7 +321,7 @@ if menu == "✨ Chat Inteligente":
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
                 add_xp(5)
 
-# --- 2. MÓDULO CONTRATOS ---
+# --- 2. CONTRATOS ---
 elif menu == "📝 Gere seu Contrato":
     st.title("📝 Gere seu Contrato")
     step = st.session_state.contract_step
@@ -412,7 +374,7 @@ elif menu == "📝 Gere seu Contrato":
         if docx: st.download_button("💾 Baixar DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
         if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
 
-# --- 3. MÓDULO EDITAIS ---
+# --- 3. MESTRE DOS EDITAIS (CORRIGIDO PARA FOCAR NA MATÉRIA) ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
@@ -429,12 +391,33 @@ elif menu == "🎯 Mestre dos Editais":
         st.session_state.quiz_data = None
         st.session_state.quiz_show_answer = False
         with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
-            tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-            txt = st.session_state.edital_text[:15000]
-            res = call_gemini("JSON Only.", f"Role: Banca. Task: Questão técnica. IGNORE: Datas/Regras. {tema} Nível: {dificuldade}. JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}\nEDITAL:\n{txt}", json_mode=True)
+            tema = f"sobre: {foco}" if foco else "sobre um tópico aleatório do CONTEÚDO PROGRAMÁTICO"
+            
+            # --- O PULO DO GATO: PROMPT AGRESSIVO ---
+            prompt = f"""
+            ATUE COMO: Banca Examinadora de Concurso.
+            OBJETIVO: Criar uma questão técnica de múltipla escolha.
+            
+            REGRAS CRÍTICAS DE EXCLUSÃO (O QUE NÃO FAZER):
+            - PROIBIDO perguntar sobre datas de inscrição, taxas, isenção ou local de prova.
+            - PROIBIDO perguntar sobre número de vagas, testes físicos ou exames médicos.
+            - PROIBIDO perguntar sobre regras administrativas do edital.
+            
+            O QUE FAZER (OBRIGATÓRIO):
+            - Varra o texto buscando SOMENTE o "CONTEÚDO PROGRAMÁTICO" ou "CONHECIMENTOS ESPECÍFICOS".
+            - Crie uma questão de: Direito (Constitucional, Penal, Adm), Português, Informática ou Legislação Específica.
+            - Nível: {dificuldade}.
+            - Foco {tema}.
+            
+            SAÍDA JSON: {{'materia':'...', 'enunciado':'...', 'alternativas':{{'A':'...','B':'...','C':'...','D':'...'}}, 'correta':'A', 'explicacao':'...'}}
+            """
+            
+            txt = st.session_state.edital_text[:20000] # Aumentei um pouco o contexto
+            res = call_gemini(prompt, f"Analise este texto de edital e gere a questão:\n\n{txt}", json_mode=True)
             data = extract_json_surgical(res)
+            
             if data: st.session_state.quiz_data = data
-            else: st.error("Erro rápido.")
+            else: st.error("Erro ao gerar questão. Tente novamente.")
 
     if not st.session_state.edital_text:
         f = st.file_uploader("Upload PDF", type=["pdf"])
@@ -442,7 +425,7 @@ elif menu == "🎯 Mestre dos Editais":
             with st.spinner("Lendo..."):
                 txt = read_pdf_safe(f)
                 if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto.")
+                else: st.error("PDF sem texto (imagem).")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
@@ -451,7 +434,7 @@ elif menu == "🎯 Mestre dos Editais":
         cc, ca = st.columns([2, 1])
         with cc:
             diff = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
-            foco = st.text_input("Foco:", placeholder="Ex: Penal")
+            foco = st.text_input("Foco:", placeholder="Ex: Penal, Crase, Excel...")
         with ca:
             st.write(""); st.write("")
             if st.button("🔥 GERAR", type="primary", use_container_width=True): gerar_turbo(diff, foco); st.rerun()
@@ -476,7 +459,6 @@ elif menu == "🎯 Mestre dos Editais":
                 else: st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
                 
-                # BOTÃO DE DOWNLOAD DA QUESTÃO
                 q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
                 docx_q = create_generic_docx(q_text, "Questão de Concurso")
                 st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
