@@ -23,18 +23,25 @@ st.set_page_config(
 # =============================================================================
 try: 
     import google.generativeai as genai
-except ImportError: genai = None
+except ImportError: 
+    genai = None
 
-try: import pdfplumber
-except ImportError: pdfplumber = None
+try: 
+    import pdfplumber
+except ImportError: 
+    pdfplumber = None
 
 try: 
     import docx
     from docx import Document
-except ImportError: docx = None; Document = None
+except ImportError: 
+    docx = None
+    Document = None
 
-try: from PIL import Image
-except ImportError: Image = None
+try: 
+    from PIL import Image
+except ImportError: 
+    Image = None
 
 # Inicialização de Estado (Session State)
 keys = {
@@ -44,7 +51,8 @@ keys = {
     "user_choice": None, "ocr_text": "", "last_call": 0
 }
 for k, v in keys.items():
-    if k not in st.session_state: st.session_state[k] = v
+    if k not in st.session_state: 
+        st.session_state[k] = v
 
 # =============================================================================
 # 3. FUNÇÕES UTILITÁRIAS E LÓGICA (BACKEND)
@@ -52,11 +60,12 @@ for k, v in keys.items():
 
 def check_rate_limit():
     """Evita chamadas excessivas (proteção simples)."""
-    # Aumentei para 2 segundos para evitar o erro 429
-    if time.time() - st.session_state.last_call < 2.0: return True 
+    if time.time() - st.session_state.last_call < 2.0: 
+        return True 
     return False
 
-def mark_call(): st.session_state.last_call = time.time()
+def mark_call(): 
+    st.session_state.last_call = time.time()
 
 def add_xp(amount):
     st.session_state.user_xp += amount
@@ -66,44 +75,48 @@ def add_xp(amount):
 def get_best_model():
     """Configura e retorna o melhor modelo Gemini disponível."""
     api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key: return None, "⚠️ Configure secrets.toml"
+    if not api_key: 
+        return None, "⚠️ Configure secrets.toml"
     try:
         genai.configure(api_key=api_key)
-        try: models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        except: return None, "Erro de Chave API"
-        # Prioriza Flash (Rápido e janela de contexto GIGANTE para editais)
+        try: 
+            models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        except: 
+            return None, "Erro de Chave API"
+        
         pref = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
         escolhido = next((m for m in pref if m in models), models[0] if models else None)
         
         if escolhido: 
             return genai.GenerativeModel(escolhido.replace("models/", "")), escolhido.replace("models/", "")
         return None, "Nenhum modelo compatível."
-    except Exception as e: return None, f"Erro Fatal: {str(e)}"
+    except Exception as e: 
+        return None, f"Erro Fatal: {str(e)}"
 
 def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_search=False):
     """Função central de comunicação com a IA."""
     if check_rate_limit(): 
-        time.sleep(1) # Espera um pouco se estiver muito rápido
+        time.sleep(1)
     
     mark_call()
     model, name = get_best_model()
-    if not model: return f"Erro: {name}"
+    if not model: 
+        return f"Erro: {name}"
     
     try:
-        # Configuração de Ferramentas (Google Search) - Híbrido
         tools_config = 'google_search_retrieval' if use_search else None
         
         if image:
             response = model.generate_content([system_prompt, image, user_prompt])
         else:
             full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
-            if json_mode: full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
+            if json_mode: 
+                full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
             
             if tools_config:
                 try:
                     response = model.generate_content(full_prompt, tools=tools_config)
                 except:
-                    # Fallback se a conta não suportar busca
                     response = model.generate_content(full_prompt)
             else:
                 response = model.generate_content(full_prompt)
@@ -119,38 +132,43 @@ def extract_json_surgical(text):
     try:
         text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
-        if match: return json.loads(match.group(0))
-    except: pass
+        if match: 
+            return json.loads(match.group(0))
+    except: 
+        pass
     return None
 
 def read_pdf_safe(file_obj):
     """Lê PDF e retorna texto."""
-    if not pdfplumber: return None
+    if not pdfplumber: 
+        return None
     try:
         text = ""
         with pdfplumber.open(BytesIO(file_obj.getvalue())) as pdf:
-            # CORREÇÃO CRÍTICA: Aumentei para 300 páginas.
-            # Editais colocam o conteúdo lá no final (Anexos).
-            # O Gemini 1.5 Flash aguenta isso tranquilo.
             for i, p in enumerate(pdf.pages):
-                if i >= 300: break 
+                if i >= 300: 
+                    break 
                 text += (p.extract_text() or "") + "\n"
         return text if text.strip() else None
-    except: return None
+    except: 
+        return None
 
 def create_generic_docx(content, title="Documento Carmélio AI"):
-    if not docx: return None
+    if not docx: 
+        return None
     doc = Document()
     doc.add_heading(title, 0)
     for line in content.split('\n'):
-        if line.strip(): doc.add_paragraph(line.strip())
+        if line.strip(): 
+            doc.add_paragraph(line.strip())
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
 def create_contract_docx(clauses, meta):
-    if not docx: return None
+    if not docx: 
+        return None
     doc = Document()
     doc.add_heading(meta.get('tipo', 'CONTRATO').upper(), 0)
     doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y')}")
@@ -161,7 +179,8 @@ def create_contract_docx(clauses, meta):
     for clause in clauses:
         doc.add_heading(clause.get('titulo', 'Cláusula'), level=1)
         for line in clause.get('conteudo', '').split('\n'):
-            if line.strip(): doc.add_paragraph(line.strip())
+            if line.strip(): 
+                doc.add_paragraph(line.strip())
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -188,9 +207,12 @@ def get_daily_verse():
 # =============================================================================
 def safe_image_show(image_path):
     if os.path.exists(image_path):
-        try: st.image(image_path, use_container_width=True)
-        except TypeError: st.image(image_path, use_column_width=True)
-    else: st.markdown("## ⚖️ Carmélio AI")
+        try: 
+            st.image(image_path, use_container_width=True)
+        except TypeError: 
+            st.image(image_path, use_column_width=True)
+    else: 
+        st.markdown("## ⚖️ Carmélio AI")
 
 st.markdown("""
 <style>
@@ -228,7 +250,9 @@ def render_sidebar_widgets():
         .time-display {{ font-size: 32px; font-weight: 800; margin: 8px 0; color: #4285F4; }}
         .btn {{ border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; margin: 2px; font-size: 11px; color: white; }}
         .btn-primary {{ background: #2563EB; }} .btn-warn {{ background: #D97706; }} .btn-danger {{ background: #DC2626; }} .btn-dark {{ background: #374151; border: 1px solid #4B5563; }}
-        iframe {{ display: none; }}
+        
+        /* CORREÇÃO: Container que engana o navegador, deixando o player ativo mas camuflado */
+        .player-wrapper {{ width: 1px; height: 1px; opacity: 0.01; overflow: hidden; position: absolute; }}
     </style>
     
     <div class="devotional-box">
@@ -255,7 +279,11 @@ def render_sidebar_widgets():
 
     <div class="widget-box">
         <div style="font-size:11px; font-weight:bold; color:#8B949E; margin-bottom:5px;">RÁDIO LOFI 24H</div>
-        <div id="youtube-player"></div>
+        
+        <div class="player-wrapper">
+            <div id="youtube-player"></div>
+        </div>
+        
         <button class="btn btn-dark" onclick="playMusic()">▶ Play</button>
         <button class="btn btn-dark" onclick="pauseMusic()">⏸ Pause</button>
         <button class="btn btn-dark" onclick="volUp()">+</button>
@@ -289,14 +317,25 @@ def render_sidebar_widgets():
         var player;
         function onYouTubeIframeAPIReady() {{
             player = new YT.Player('youtube-player', {{
-                height: '0', width: '0', videoId: 'jfKfPfyJRdk',
-                playerVars: {{ 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk' }}
+                height: '200', width: '200', videoId: 'jfKfPfyJRdk',
+                playerVars: {{ 'playsinline': 1, 'controls': 0, 'loop': 1, 'playlist': 'jfKfPfyJRdk', 'autoplay': 0 }}
             }});
         }}
-        function playMusic() {{ if(player) {{ player.playVideo(); document.getElementById('music-status').style.display='block'; }} }}
-        function pauseMusic() {{ if(player) {{ player.pauseVideo(); }} }}
-        function volUp() {{ if(player) player.setVolume(player.getVolume()+10); }}
-        function volDown() {{ if(player) player.setVolume(player.getVolume()-10); }}
+        function playMusic() {{ 
+            if(player && typeof player.playVideo === 'function') {{ 
+                player.playVideo(); 
+                document.getElementById('music-status').style.display='block'; 
+                document.getElementById('music-status').innerText = 'Tocando 🎵';
+            }} 
+        }}
+        function pauseMusic() {{ 
+            if(player && typeof player.pauseVideo === 'function') {{ 
+                player.pauseVideo(); 
+                document.getElementById('music-status').innerText = 'Pausado ⏸';
+            }} 
+        }}
+        function volUp() {{ if(player && typeof player.setVolume === 'function') player.setVolume(Math.min(player.getVolume()+10, 100)); }}
+        function volDown() {{ if(player && typeof player.setVolume === 'function') player.setVolume(Math.max(player.getVolume()-10, 0)); }}
     </script>
     """
     components.html(html_code, height=550)
@@ -310,8 +349,10 @@ with st.sidebar:
     st.markdown("---")
     
     model_obj, status_msg = get_best_model()
-    if not model_obj: st.error(f"❌ {status_msg}")
-    else: st.success(f"🟢 **{status_msg}**")
+    if not model_obj: 
+        st.error(f"❌ {status_msg}")
+    else: 
+        st.success(f"🟢 **{status_msg}**")
         
     menu = st.radio("Menu", [
         "✨ Chat Inteligente", 
@@ -331,14 +372,15 @@ if menu == "✨ Chat Inteligente":
     if not st.session_state.chat_history: 
         st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
+        with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): 
+            st.markdown(msg["content"])
     if p := st.chat_input("Digite..."):
         st.session_state.chat_history.append({"role": "user", "content": p})
-        with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
+        with st.chat_message("user", avatar="🧑‍⚖️"): 
+            st.write(p)
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Pesquisando e analisando..."):
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                # ATIVA O MODO ONLINE (use_search=True)
                 res = call_gemini("Advogado Sênior. Use informações atualizadas.", history, use_search=True)
                 st.write(res)
                 st.session_state.chat_history.append({"role": "assistant", "content": res})
@@ -375,29 +417,42 @@ elif menu == "📝 Gere seu Contrato":
                             st.session_state.contract_step = 2
                             add_xp(25)
                             st.rerun()
-                        else: st.error("Erro ao gerar.")
+                        else: 
+                            st.error("Erro ao gerar.")
     elif step == 2:
-        st.header("📑 Revisão"); 
-        if st.button("➕ Cláusula"): st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."}); st.rerun()
+        st.header("📑 Revisão")
+        if st.button("➕ Cláusula"): 
+            st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."})
+            st.rerun()
         to_remove = []
         for i, c in enumerate(st.session_state.contract_clauses):
             with st.expander(f"{i+1}. {c.get('titulo')}", expanded=False):
-                nt = st.text_input("T",c['titulo'],key=f"t{i}"); nc = st.text_area("C",c['conteudo'],key=f"c{i}")
+                nt = st.text_input("T",c['titulo'],key=f"t{i}")
+                nc = st.text_area("C",c['conteudo'],key=f"c{i}")
                 st.session_state.contract_clauses[i] = {"titulo":nt,"conteudo":nc}
-                if st.button("🗑️",key=f"d{i}"): to_remove.append(i)
+                if st.button("🗑️",key=f"d{i}"): 
+                    to_remove.append(i)
         if to_remove:
-            for i in sorted(to_remove, reverse=True): del st.session_state.contract_clauses[i]
+            for i in sorted(to_remove, reverse=True): 
+                del st.session_state.contract_clauses[i]
             st.rerun()
         c1,c2=st.columns([1,2])
-        if c1.button("⬅️"): st.session_state.contract_step=1; st.rerun()
-        if c2.button("Finalizar ➔",type="primary",use_container_width=True): st.session_state.contract_step=3; st.rerun()
+        if c1.button("⬅️"): 
+            st.session_state.contract_step=1
+            st.rerun()
+        if c2.button("Finalizar ➔",type="primary",use_container_width=True): 
+            st.session_state.contract_step=3
+            st.rerun()
     elif step == 3:
         st.header("✅ Pronto")
-        docx = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
-        if docx: st.download_button("💾 Baixar DOCX", docx, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
-        if st.button("✏️ Editar"): st.session_state.contract_step=2; st.rerun()
+        docx_bytes = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
+        if docx_bytes: 
+            st.download_button("💾 Baixar DOCX", docx_bytes, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+        if st.button("✏️ Editar"): 
+            st.session_state.contract_step=2
+            st.rerun()
 
-# --- 3. MESTRE DOS EDITAIS (CORRIGIDO: 300 PÁGINAS + PROMPT AGRESSIVO) ---
+# --- 3. MESTRE DOS EDITAIS ---
 elif menu == "🎯 Mestre dos Editais":
     st.title("🎯 Mestre dos Editais")
     
@@ -415,10 +470,8 @@ elif menu == "🎯 Mestre dos Editais":
         st.session_state.quiz_show_answer = False
         with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
             tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-            # AGORA ELE LÊ TUDO O QUE FOI CAPTURADO (ATÉ 300 PAGINAS)
             txt = st.session_state.edital_text
             
-            # PROMPT SNIPER: IGNORA REGRAS
             prompt = f"""
             Role: Banca Examinadora.
             TASK: Criar questão técnica de múltipla escolha.
@@ -433,20 +486,28 @@ elif menu == "🎯 Mestre dos Editais":
                 st.error(res)
             else:
                 data = extract_json_surgical(res)
-                if data: st.session_state.quiz_data = data
-                else: st.error("Erro rápido.")
+                if data: 
+                    st.session_state.quiz_data = data
+                else: 
+                    st.error("Erro rápido.")
 
     if not st.session_state.edital_text:
         f = st.file_uploader("Upload PDF", type=["pdf"])
         if f and f.name != st.session_state.edital_filename:
             with st.spinner("Lendo (pode demorar um pouco se for grande)..."):
                 txt = read_pdf_safe(f)
-                if txt: st.session_state.edital_text=txt; st.session_state.edital_filename=f.name; st.rerun()
-                else: st.error("PDF sem texto.")
+                if txt: 
+                    st.session_state.edital_text=txt
+                    st.session_state.edital_filename=f.name
+                    st.rerun()
+                else: 
+                    st.error("PDF sem texto.")
     else:
         c1, c2 = st.columns([3, 1])
         c1.success(f"📂 **{st.session_state.edital_filename}**")
-        if c2.button("🗑️ Trocar", use_container_width=True): st.session_state.edital_text=""; st.rerun()
+        if c2.button("🗑️ Trocar", use_container_width=True): 
+            st.session_state.edital_text=""
+            st.rerun()
         st.markdown("---")
         cc, ca = st.columns([2, 1])
         with cc:
@@ -454,7 +515,9 @@ elif menu == "🎯 Mestre dos Editais":
             foco = st.text_input("Foco:", placeholder="Ex: Penal")
         with ca:
             st.write(""); st.write("")
-            if st.button("🔥 GERAR", type="primary", use_container_width=True): gerar_turbo(diff, foco); st.rerun()
+            if st.button("🔥 GERAR", type="primary", use_container_width=True): 
+                gerar_turbo(diff, foco)
+                st.rerun()
 
         if st.session_state.quiz_data:
             q = st.session_state.quiz_data
@@ -463,23 +526,41 @@ elif menu == "🎯 Mestre dos Editais":
             opts = q['alternativas']
             if not st.session_state.quiz_show_answer:
                 c1,c2 = st.columns(2)
-                if c1.button(f"A) {opts['A']}", use_container_width=True): st.session_state.user_choice="A"; st.session_state.quiz_show_answer=True; st.rerun()
-                if c2.button(f"B) {opts['B']}", use_container_width=True): st.session_state.user_choice="B"; st.session_state.quiz_show_answer=True; st.rerun()
-                if c1.button(f"C) {opts['C']}", use_container_width=True): st.session_state.user_choice="C"; st.session_state.quiz_show_answer=True; st.rerun()
-                if c2.button(f"D) {opts['D']}", use_container_width=True): st.session_state.user_choice="D"; st.session_state.quiz_show_answer=True; st.rerun()
+                if c1.button(f"A) {opts['A']}", use_container_width=True): 
+                    st.session_state.user_choice="A"
+                    st.session_state.quiz_show_answer=True
+                    st.rerun()
+                if c2.button(f"B) {opts['B']}", use_container_width=True): 
+                    st.session_state.user_choice="B"
+                    st.session_state.quiz_show_answer=True
+                    st.rerun()
+                if c1.button(f"C) {opts['C']}", use_container_width=True): 
+                    st.session_state.user_choice="C"
+                    st.session_state.quiz_show_answer=True
+                    st.rerun()
+                if c2.button(f"D) {opts['D']}", use_container_width=True): 
+                    st.session_state.user_choice="D"
+                    st.session_state.quiz_show_answer=True
+                    st.rerun()
             else:
                 u, c = st.session_state.user_choice, q['correta']
                 for l,t in opts.items():
                     icon = "✅" if l==c else ("❌" if l==u else "⬜")
                     st.write(f"{icon} **{l})** {t}")
-                if u==c: st.success("Acertou!"); add_xp(50)
-                else: st.error(f"Errou. Correta: {c}")
+                if u==c: 
+                    st.success("Acertou!")
+                    add_xp(50)
+                else: 
+                    st.error(f"Errou. Correta: {c}")
                 st.write(f"**Explicação:** {q['explicacao']}")
                 
                 q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
                 docx_q = create_generic_docx(q_text, "Questão de Concurso")
-                st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                if st.button("➡️ Próxima", type="primary"): gerar_turbo(diff, foco); st.rerun()
+                if docx_q:
+                    st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                if st.button("➡️ Próxima", type="primary"): 
+                    gerar_turbo(diff, foco)
+                    st.rerun()
 
 # --- 4. MÓDULO OCR ---
 elif menu == "🏢 Cartório OCR":
@@ -508,7 +589,8 @@ elif menu == "🏢 Cartório OCR":
     if st.session_state.ocr_text:
         st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
         docx_ocr = create_generic_docx(st.session_state.ocr_text, "Transcrição de Livro")
-        st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+        if docx_ocr:
+            st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
 # --- 5. MÓDULO TRANSCRIÇÃO ---
 elif menu == "🎙️ Transcrição":
@@ -524,4 +606,5 @@ elif menu == "🎙️ Transcrição":
                 texto_demo = "Esta é uma transcrição simulada do áudio enviado.\nEm um ambiente de produção real, o áudio seria processado pela API."
                 st.text_area("Resultado:", texto_demo, height=200)
                 docx_audio = create_generic_docx(texto_demo, "Transcrição de Áudio")
-                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                if docx_audio:
+                    st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")v
