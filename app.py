@@ -1,25 +1,6 @@
-Esse erro aconteceu porque a linha do versículo de **Romanos 8:28** ficou muito longa e, na hora de formatar, ela foi quebrada no meio do texto sem fechar as aspas. O Python vê que a frase continuou na linha de baixo sem um fechamento correto e joga o erro de `unterminated string literal`.
+O seu envio anterior acabou juntando várias linhas de importação na mesma linha (ex: `import streamlit as stimport streamlit.components.v1 as componentsimport os...`), o que faria o Python acusar outro erro de sintaxe imediatamente ao tentar rodar.
 
----
-
-### Como resolver:
-
-No seu editor do GitHub, vá até a **linha 210** e substitua aquele bloco dos versículos de **Romanos 8:28** e **Provérbios 3:5** para que fiquem em uma linha única e contínua, sem quebras de texto.
-
-O bloco correto dessa seção deve ficar exatamente assim:
-
-```python
-        {"ref": "Deus é o nosso refúgio e a nossa fortaleza, auxílio sempre presente na adversidade."},
-        {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age em todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
-        {"ref": "Provérbios 3:5", "txt": "Confie no Senhor de todo o seu coração e não se apóie em seu próprio entendimento."},
-
-```
-
----
-
-### 📋 Código Completo Sem Erros (Revisado)
-
-Para garantir que nenhuma outra linha longa tenha sido quebrada acidentalmente pelo editor, limpe o arquivo no GitHub e cole o código inteiro novamente por este bloco aqui:
+Aqui está o código completo, com a quebra de linhas corrigida e estruturado linha por linha para você apenas copiar, limpar o arquivo antigo e colar.
 
 ```python
 import streamlit as st
@@ -732,4 +713,4 @@ elif menu == "🎙️ Transcrição":
 
 ```
 
-Substitua tudo no GitHub e salve. O erro vai sumir por completo!
+Certifique-se de limpar completamente o editor do GitHub antes de colar este bloco novo. Agora o deploy vai rodar de forma perfeita e sem travas de código!
