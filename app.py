@@ -607,4 +607,4 @@ elif menu == "🎙️ Transcrição":
                 st.text_area("Resultado:", texto_demo, height=200)
                 docx_audio = create_generic_docx(texto_demo, "Transcrição de Áudio")
                 if docx_audio:
-                    st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")v
+                 st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
