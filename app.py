@@ -1,8 +1,3 @@
-O seu envio anterior acabou juntando várias linhas de importação na mesma linha (ex: `import streamlit as stimport streamlit.components.v1 as componentsimport os...`), o que faria o Python acusar outro erro de sintaxe imediatamente ao tentar rodar.
-
-Aqui está o código completo, com a quebra de linhas corrigida e estruturado linha por linha para você apenas copiar, limpar o arquivo antigo e colar.
-
-```python
 import streamlit as st
 import streamlit.components.v1 as components
 import os
@@ -53,7 +48,7 @@ keys = {
     "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
     "contract_meta": {}, "chat_history": [], "edital_text": "", 
     "edital_filename": "", "quiz_data": None, "quiz_show_answer": False, 
-    "user_choice": None, "ocr_text": "", "last_call": 0
+    "user_choice": None, "ocr_text": "", "last_call": 0, "audio_text": ""
 }
 for k, v in keys.items():
     if k not in st.session_state: 
@@ -103,8 +98,8 @@ def get_best_model():
     except Exception as e: 
         return None, f"Erro Fatal: {str(e)}"
 
-def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_search=False):
-    """Função central de comunicação com a IA."""
+def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_bytes=None, audio_mime=None, use_search=False):
+    """Função central de comunicação com a IA com suporte a texto, imagem e áudio nativo."""
     if check_rate_limit(): 
         time.sleep(1)
     
@@ -116,20 +111,32 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_sea
     try:
         tools_config = 'google_search_retrieval' if use_search else None
         
+        # Fluxo Multimodal para Áudio Real
+        if audio_bytes:
+            audio_part = {
+                "mime_type": audio_mime,
+                "data": audio_bytes
+            }
+            response = model.generate_content([system_prompt, audio_part, user_prompt])
+            return response.text
+
+        # Fluxo Multimodal para Imagem (OCR)
         if image:
             response = model.generate_content([system_prompt, image, user_prompt])
-        else:
-            full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
-            if json_mode: 
-                full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
+            return response.text
             
-            if tools_config:
-                try:
-                    response = model.generate_content(full_prompt, tools=tools_config)
-                except:
-                    response = model.generate_content(full_prompt)
-            else:
+        # Fluxo Tradicional de Texto
+        full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
+        if json_mode: 
+            full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
+        
+        if tools_config:
+            try:
+                response = model.generate_content(full_prompt, tools=tools_config)
+            except:
                 response = model.generate_content(full_prompt)
+        else:
+            response = model.generate_content(full_prompt)
                 
         return response.text
     except Exception as e: 
@@ -140,7 +147,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, use_sea
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: 
             return json.loads(match.group(0))
@@ -207,7 +215,7 @@ def get_daily_verse():
         {"ref": "Jeremias 29:11", "txt": "Porque sou eu que conheço os planos que tenho para vocês, diz o Senhor, planos de fazê-los prosperar."},
         {"ref": "Provérbios 16:3", "txt": "Consagre ao Senhor tudo o que você faz, e os seus planos serão bem-sucedidos."},
         {"ref": "Salmos 121:1-2", "txt": "Levanto os meus olhos para os montes e pergunto: De onde me vem o socorro? O meu socorro vem do Senhor."},
-        {"ref": "2 Timóteo 1:7", "txt": "Pois Deus não nos deu espírito de covardia, mas de poder, de amor e de equilíbrio."},
+        {"ref": "2 Timóteo 1:7", "txt": "Pois Deus não nos deu espírito de covardia, mas di poder, de amor e de equilíbrio."},
         {"ref": "Salmos 23:1", "txt": "O Senhor é o meu pastor; de nada terei falta."},
         {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças. Voam bem alto como águias; correm e não ficam exaustos."},
         {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas serão acrescentadas a vocês."},
@@ -450,6 +458,14 @@ with st.sidebar:
     render_sidebar_widgets()
     st.markdown("---")
     
+    # Sistema Gatekeeper de Proteção por Senha Antiuso Indevido
+    password_input = st.text_input("Chave do Estúdio:", type="password", placeholder="Insira a senha master")
+    # Para testes, mude para a sua senha de preferência ou deixe limpo se quiser ignorar
+    studio_authorized = (password_input == st.secrets.get("STUDIO_PASSWORD", "1234"))
+    
+    if not studio_authorized:
+        st.warning("🔒 Insira a Chave correta para liberar os módulos de IA.")
+    
     model_obj, status_msg = get_best_model()
     if not model_obj: 
         st.error(f"❌ {status_msg}")
@@ -468,249 +484,267 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# --- 1. CHAT (COM MODELO INTELIGENTE + GOOGLE HÍBRIDO) ---
-if menu == "✨ Chat Inteligente":
-    st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
-    if not st.session_state.chat_history: 
-        st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado às IAs mais robustas do mercado e indexado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): 
-            st.markdown(msg["content"])
-    if p := st.chat_input("Digite..."):
-        st.session_state.chat_history.append({"role": "user", "content": p})
-        with st.chat_message("user", avatar="🧑‍⚖️"): 
-            st.write(p)
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Analisando com IA de última geração..."):
-                history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                res = call_gemini("Você é um Advogado Sênior e Assessor Jurídico de alto nível. Forneça respostas técnicas embasadas e precisas.", history, use_search=True)
-                st.write(res)
-                st.session_state.chat_history.append({"role": "assistant", "content": res})
-                add_xp(5)
+# Bloqueio de Interface caso a senha não tenha sido digitada
+if not studio_authorized:
+    st.info("### 🔐 Espaço Protegido\nPor favor, forneça a Chave do Estúdio na barra lateral esquerda para começar a utilizar os recursos de inteligência artificial.")
 
-# --- 2. CONTRATOS ---
-elif menu == "📝 Gere seu Contrato":
-    st.title("📝 Gere seu Contrato")
-    step = st.session_state.contract_step
-    
-    if step == 1:
-        st.markdown("""<div class="onboarding-box"><b>Crie minutas perfeitas.</b><br>Escolha o tipo, informe as partes e a IA redige.</div>""", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1,1,1])
-    c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
-    c2.markdown(f"**2. Minuta** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
-    c3.markdown(f"**3. Baixar** {'✅' if step > 3 else ('🟦' if step==3 else '⬜')}")
-    st.progress(int(step/3 * 100))
+else:
+    # --- 1. CHAT (COM MODELO INTELIGENTE + GOOGLE HÍBRIDO) ---
+    if menu == "✨ Chat Inteligente":
+        st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
+        if not st.session_state.chat_history: 
+            st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado às IAs mais robustas do mercado e indexado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): 
+                st.markdown(msg["content"])
+        if p := st.chat_input("Digite..."):
+            st.session_state.chat_history.append({"role": "user", "content": p})
+            with st.chat_message("user", avatar="🧑‍⚖️"): 
+                st.write(p)
+            with st.chat_message("assistant", avatar="🤖"):
+                with st.spinner("Analisando com IA de última geração..."):
+                    history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
+                    res = call_gemini("Você é um Advogado Sênior e Assessor Jurídico de alto nível. Forneça respostas técnicas embasadas e precisas.", history, use_search=True)
+                    st.write(res)
+                    st.session_state.chat_history.append({"role": "assistant", "content": res})
+                    add_xp(5)
 
-    if step == 1:
-        with st.container(border=True):
-            tipo = st.selectbox("Modelo:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Compra e Venda Veículo", "Outro"])
-            partes = st.text_area("Partes")
-            objeto = st.text_area("Objeto")
-            if st.button("Gerar Minuta ➔", type="primary", use_container_width=True):
-                if partes and objeto:
-                    with st.spinner("Redigindo com IA estrutural..."):
-                        lei = "Lei do Inquilinato" if "Locação" in tipo else "Código Civil"
-                        prompt = f"Crie contrato de {tipo}. Base: {lei}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
-                        res = call_gemini("JSON only.", prompt, json_mode=True)
-                        data = extract_json_surgical(res)
-                        if data and 'clauses' in data:
-                            st.session_state.contract_meta = {"tipo": tipo, "partes": partes, "objeto": objeto}
-                            st.session_state.contract_clauses = data['clauses']
-                            st.session_state.contract_step = 2
-                            add_xp(25)
-                            st.rerun()
-                        else: 
-                            st.error("Erro ao gerar.")
-    elif step == 2:
-        st.header("📑 Revisão")
-        if st.button("➕ Cláusula"): 
-            st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."})
-            st.rerun()
-        to_remove = []
-        for i, c in enumerate(st.session_state.contract_clauses):
-            with st.expander(f"{i+1}. {c.get('titulo')}", expanded=False):
-                nt = st.text_input("T",c['titulo'],key=f"t{i}")
-                nc = st.text_area("C",c['conteudo'],key=f"c{i}")
-                st.session_state.contract_clauses[i] = {"titulo":nt,"conteudo":nc}
-                if st.button("🗑️",key=f"d{i}"): 
-                    to_remove.append(i)
-        if to_remove:
-            for i in sorted(to_remove, reverse=True): 
-                del st.session_state.contract_clauses[i]
-            st.rerun()
-        c1,c2=st.columns([1,2])
-        if c1.button("⬅️"): 
-            st.session_state.contract_step=1
-            st.rerun()
-        if c2.button("Finalizar ➔",type="primary",use_container_width=True): 
-            st.session_state.contract_step=3
-            st.rerun()
-    elif step == 3:
-        st.header("✅ Pronto")
-        docx_bytes = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
-        if docx_bytes: 
-            st.download_button("💾 Baixar DOCX", docx_bytes, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
-        if st.button("✏️ Editar"): 
-            st.session_state.contract_step=2
-            st.rerun()
+    # --- 2. CONTRATOS ---
+    elif menu == "📝 Gere seu Contrato":
+        st.title("📝 Gere seu Contrato")
+        step = st.session_state.contract_step
+        
+        if step == 1:
+            st.markdown("""<div class="onboarding-box"><b>Crie minutas perfeitas.</b><br>Escolha o tipo, informe as partes e a IA redige.</div>""", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1,1,1])
+        c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
+        c2.markdown(f"**2. Minuta** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
+        c3.markdown(f"**3. Baixar** {'✅' if step > 3 else ('🟦' if step==3 else '⬜')}")
+        st.progress(int(step/3 * 100))
 
-# --- 3. MESTRE DOS EDITAIS ---
-elif menu == "🎯 Mestre dos Editais":
-    st.title("🎯 Mestre dos Editais")
-    
-    if not st.session_state.edital_text:
-        st.markdown("""
-        <div class="onboarding-box">
-            <h4>🚀 Professor de Edital</h4>
-            <p>Transforme PDF em simulador de prova usando inteligência contextual profunda.</p>
-            <ul><li>Carregue o Edital > Gere questões técnicas > Aprenda.</li></ul>
-        </div>
-        """, unsafe_allow_html=True)
-
-    def gerar_turbo(dificuldade, foco):
-        st.session_state.quiz_data = None
-        st.session_state.quiz_show_answer = False
-        with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
-            tema = f"FOCO: {foco}." if foco else "Tema aleatório."
-            txt = st.session_state.edital_text
-            
-            prompt = f"""
-            Role: Banca Examinadora de Concursos Públicos.
-            TASK: Criar questão técnica inédita de múltipla escolha.
-            CRITICAL: IGNORE TOTALMENTE datas, inscrições, taxas, isenções, locais de prova e vagas.
-            SOURCE: Busque APENAS nos ANEXOS de 'CONTEÚDO PROGRAMÁTICO' ou 'CONHECIMENTOS ESPECÍFICOS'.
-            {tema} Nível: {dificuldade}.
-            JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}
-            """
-            
-            res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{txt}", json_mode=True)
-            if "Limite de velocidade" in res:
-                st.error(res)
-            else:
-                data = extract_json_surgical(res)
-                if data: 
-                    st.session_state.quiz_data = data
-                else: 
-                    st.error("Erro rápido.")
-
-    if not st.session_state.edital_text:
-        f = st.file_uploader("Upload PDF", type=["pdf"])
-        if f and f.name != st.session_state.edital_filename:
-            with st.spinner("Lendo (pode demorar um pouco se for grande)..."):
-                txt = read_pdf_safe(f)
-                if txt: 
-                    st.session_state.edital_text=txt
-                    st.session_state.edital_filename=f.name
-                    st.rerun()
-                else: 
-                    st.error("PDF sem texto.")
-    else:
-        c1, c2 = st.columns([3, 1])
-        c1.success(f"📂 **{st.session_state.edital_filename}**")
-        if c2.button("🗑️ Trocar", use_container_width=True): 
-            st.session_state.edital_text=""
-            st.rerun()
-        st.markdown("---")
-        cc, ca = st.columns([2, 1])
-        with cc:
-            diff = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
-            foco = st.text_input("Foco:", placeholder="Ex: Penal")
-        with ca:
-            st.write(""); st.write("")
-            if st.button("🔥 GERAR", type="primary", use_container_width=True): 
-                gerar_turbo(diff, foco)
+        if step == 1:
+            with st.container(border=True):
+                tipo = st.selectbox("Modelo:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Compra e Venda Veículo", "Outro"])
+                partes = st.text_area("Partes")
+                objeto = st.text_area("Objeto")
+                if st.button("Gerar Minuta ➔", type="primary", use_container_width=True):
+                    if partes and objeto:
+                        with st.spinner("Redigindo com IA estrutural..."):
+                            lei = "Lei do Inquilinato" if "Locação" in tipo else "Código Civil"
+                            prompt = f"Crie contrato de {tipo}. Base: {lei}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
+                            res = call_gemini("JSON only.", prompt, json_mode=True)
+                            data = extract_json_surgical(res)
+                            if data and 'clauses' in data:
+                                st.session_state.contract_meta = {"tipo": tipo, "partes": partes, "objeto": objeto}
+                                st.session_state.contract_clauses = data['clauses']
+                                st.session_state.contract_step = 2
+                                add_xp(25)
+                                st.rerun()
+                            else: 
+                                st.error("Erro ao gerar.")
+        elif step == 2:
+            st.header("📑 Revisão")
+            if st.button("➕ Cláusula"): 
+                st.session_state.contract_clauses.append({"titulo":"Nova","conteudo":"..."})
+                st.rerun()
+            to_remove = []
+            for i, c in enumerate(st.session_state.contract_clauses):
+                with st.expander(f"{i+1}. {c.get('titulo')}", expanded=False):
+                    nt = st.text_input("T",c['titulo'],key=f"t{i}")
+                    nc = st.text_area("C",c['conteudo'],key=f"c{i}")
+                    st.session_state.contract_clauses[i] = {"titulo":nt,"conteudo":nc}
+                    if st.button("🗑️",key=f"d{i}"): 
+                        to_remove.append(i)
+            if to_remove:
+                for i in sorted(to_remove, reverse=True): 
+                    del st.session_state.contract_clauses[i]
+                st.rerun()
+            c1,c2=st.columns([1,2])
+            if c1.button("⬅️"): 
+                st.session_state.contract_step=1
+                st.rerun()
+            if c2.button("Finalizar ➔",type="primary",use_container_width=True): 
+                st.session_state.contract_step=3
+                st.rerun()
+        elif step == 3:
+            st.header("✅ Pronto")
+            docx_bytes = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
+            if docx_bytes: 
+                st.download_button("💾 Baixar DOCX", docx_bytes, "Contrato.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", use_container_width=True)
+            if st.button("✏️ Editar"): 
+                st.session_state.contract_step=2
                 st.rerun()
 
-        if st.session_state.quiz_data:
-            q = st.session_state.quiz_data
-            st.markdown(f"### 📚 {q.get('materia','Geral')}")
-            st.info(q['enunciado'])
-            opts = q['alternativas']
-            if not st.session_state.quiz_show_answer:
-                c1,c2 = st.columns(2)
-                if c1.button(f"A) {opts['A']}", use_container_width=True): 
-                    st.session_state.user_choice="A"
-                    st.session_state.quiz_show_answer=True
-                    st.rerun()
-                if c2.button(f"B) {opts['B']}", use_container_width=True): 
-                    st.session_state.user_choice="B"
-                    st.session_state.quiz_show_answer=True
-                    st.rerun()
-                if c1.button(f"C) {opts['C']}", use_container_width=True): 
-                    st.session_state.user_choice="C"
-                    st.session_state.quiz_show_answer=True
-                    st.rerun()
-                if c2.button(f"D) {opts['D']}", use_container_width=True): 
-                    st.session_state.user_choice="D"
-                    st.session_state.quiz_show_answer=True
-                    st.rerun()
-            else:
-                u, c = st.session_state.user_choice, q['correta']
-                for l,t in opts.items():
-                    icon = "✅" if l==c else ("❌" if l==u else "⬜")
-                    st.write(f"{icon} **{l})** {t}")
-                if u==c: 
-                    st.success("Acertou!")
-                    add_xp(50)
-                else: 
-                    st.error(f"Errou. Correta: {c}")
-                st.write(f"**Explicação:** {q['explicacao']}")
-                
-                q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
-                docx_q = create_generic_docx(q_text, "Questão de Concurso")
-                if docx_q:
-                    st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                if st.button("➡️ Próxima", type="primary"): 
-                    gerar_turbo(diff, foco)
-                    st.rerun()
+    # --- 3. MESTRE DOS EDITAIS ---
+    elif menu == "🎯 Mestre dos Editais":
+        st.title("🎯 Mestre dos Editais")
+        
+        if not st.session_state.edital_text:
+            st.markdown("""
+            <div class="onboarding-box">
+                <h4>🚀 Professor de Edital</h4>
+                <p>Transforme PDF em simulador de prova usando inteligência contextual profunda.</p>
+                <ul><li>Carregue o Edital > Gere questões técnicas > Aprenda.</li></ul>
+            </div>
+            """, unsafe_allow_html=True)
 
-# --- 4. MÓDULO OCR ---
-elif menu == "🏢 Cartório OCR":
-    st.title("🏢 Cartório OCR (Digitalizador)")
-    st.markdown("""
-    <div class="onboarding-box">
-        <h4>📸 Do Papel para o Digital</h4>
-        <p>Digitalize folhas e transcrições com visão computacional de alta fidelidade.</p>
-        <ul><li><b>Envie:</b> Foto da página do livro.</li><li><b>Receba:</b> Texto transcrito para Certidão de Inteiro Teor.</li></ul>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    img_file = st.file_uploader("Foto do Livro/Documento", type=["png", "jpg", "jpeg"])
-    if img_file:
-        image = Image.open(img_file)
-        st.image(image, caption="Imagem Carregada", use_container_width=True)
-        if st.button("🔍 Extrair Texto", type="primary"):
-            with st.spinner("Processando OCR com IA Multimodal..."):
-                res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o texto com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
+        def gerar_turbo(dificuldade, foco):
+            st.session_state.quiz_data = None
+            st.session_state.quiz_show_answer = False
+            with st.spinner(f"⚡ Criando questão ({dificuldade})..."):
+                tema = f"FOCO: {foco}." if foco else "Tema aleatório."
+                txt = st.session_state.edital_text
+                
+                prompt = f"""
+                Role: Banca Examinadora de Concursos Públicos.
+                TASK: Criar questão técnica inédita de múltipla escolha.
+                CRITICAL: IGNORE TOTALMENTE datas, inscrições, taxas, isenções, locais de prova e vagas.
+                SOURCE: Busque APENAS nos ANEXOS de 'CONTEÚDO PROGRAMÁTICO' ou 'CONHECIMENTOS ESPECÍFICOS'.
+                {tema} Nível: {dificuldade}.
+                JSON Output: {{'materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}
+                """
+                
+                res = call_gemini("JSON Only.", f"{prompt}\nEDITAL:\n{txt}", json_mode=True)
                 if "Limite de velocidade" in res:
                     st.error(res)
                 else:
-                    st.session_state.ocr_text = res
-                    add_xp(30)
-    
-    if st.session_state.ocr_text:
-        st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
-        docx_ocr = create_generic_docx(st.session_state.ocr_text, "Transcrição de Livro")
-        if docx_ocr:
-            st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+                    data = extract_json_surgical(res)
+                    if data: 
+                        st.session_state.quiz_data = data
+                    else: 
+                        st.error("Erro rápido.")
 
-# --- 5. MÓDULO TRANSCRIÇÃO ---
-elif menu == "🎙️ Transcrição":
-    st.title("🎙️ Transcrição de Áudio")
-    st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto</h4><p>Transcreva audiências e ditações.</p></div>""", unsafe_allow_html=True)
-    
-    audio_file = st.file_uploader("Arquivo de Áudio", type=["mp3", "wav", "m4a"])
-    if audio_file:
-        st.audio(audio_file)
-        if st.button("📝 Transcrever", type="primary"):
-            with st.spinner("Processando..."):
-                st.info("Funcionalidade demonstrativa (Requer processamento em nuvem pago).")
-                texto_demo = "Esta é uma transcrição simulada do áudio enviado.\nEm um ambiente de produção real, o áudio seria processado pela API."
-                st.text_area("Resultado:", texto_demo, height=200)
-                docx_audio = create_generic_docx(texto_demo, "Transcrição de Áudio")
-                if docx_audio:
-                    st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        if not st.session_state.edital_text:
+            f = st.file_uploader("Upload PDF", type=["pdf"])
+            if f and f.name != st.session_state.edital_filename:
+                with st.spinner("Lendo (pode demorar um pouco se for grande)..."):
+                    txt = read_pdf_safe(f)
+                    if txt: 
+                        st.session_state.edital_text=txt
+                        st.session_state.edital_filename=f.name
+                        st.rerun()
+                    else: 
+                        st.error("PDF sem texto.")
+        else:
+            c1, c2 = st.columns([3, 1])
+            c1.success(f"📂 **{st.session_state.edital_filename}**")
+            if c2.button("🗑️ Trocar", use_container_width=True): 
+                st.session_state.edital_text=""
+                st.rerun()
+            st.markdown("---")
+            cc, ca = st.columns([2, 1])
+            with cc:
+                diff = st.select_slider("Nível:", ["Fácil", "Médio", "Difícil", "Pesadelo"], value="Difícil")
+                foco = st.text_input("Foco:", placeholder="Ex: Penal")
+            with ca:
+                st.write(""); st.write("")
+                if st.button("🔥 GERAR", type="primary", use_container_width=True): 
+                    gerar_turbo(diff, foco)
+                    st.rerun()
 
-```
+            if st.session_state.quiz_data:
+                q = st.session_state.quiz_data
+                st.markdown(f"### 📚 {q.get('materia','Geral')}")
+                st.info(q['enunciado'])
+                opts = q['alternativas']
+                if not st.session_state.quiz_show_answer:
+                    c1,c2 = st.columns(2)
+                    if c1.button(f"A) {opts['A']}", use_container_width=True): 
+                        st.session_state.user_choice="A"
+                        st.session_state.quiz_show_answer=True
+                        st.rerun()
+                    if c2.button(f"B) {opts['B']}", use_container_width=True): 
+                        st.session_state.user_choice="B"
+                        st.session_state.quiz_show_answer=True
+                        st.rerun()
+                    if c1.button(f"C) {opts['C']}", use_container_width=True): 
+                        st.session_state.user_choice="C"
+                        st.session_state.quiz_show_answer=True
+                        st.rerun()
+                    if c2.button(f"D) {opts['D']}", use_container_width=True): 
+                        st.session_state.user_choice="D"
+                        st.session_state.quiz_show_answer=True
+                        st.rerun()
+                else:
+                    u, c = st.session_state.user_choice, q['correta']
+                    for l,t in opts.items():
+                        icon = "✅" if l==c else ("❌" if l==u else "⬜")
+                        st.write(f"{icon} **{l})** {t}")
+                    if u==c: 
+                        st.success("Acertou!")
+                        add_xp(50)
+                    else: 
+                        st.error(f"Errou. Correta: {c}")
+                    st.write(f"**Explicação:** {q['explicacao']}")
+                    
+                    q_text = f"MATÉRIA: {q['materia']}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nCOMENTÁRIO:\n{q['explicacao']}"
+                    docx_q = create_generic_docx(q_text, "Questão de Concurso")
+                    if docx_q:
+                        st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    if st.button("➡️ Próxima", type="primary"): 
+                        gerar_turbo(diff, foco)
+                        st.rerun()
 
-Certifique-se de limpar completamente o editor do GitHub antes de colar este bloco novo. Agora o deploy vai rodar de forma perfeita e sem travas de código!
+    # --- 4. MÓDULO OCR ---
+    elif menu == "🏢 Cartório OCR":
+        st.title("🏢 Cartório OCR (Digitalizador)")
+        st.markdown("""
+        <div class="onboarding-box">
+            <h4>📸 Do Papel para o Digital</h4>
+            <p>Digitalize folhas e transcrições com visão computacional de alta fidelidade.</p>
+            <ul><li><b>Envie:</b> Foto da página do livro.</li><li><b>Receba:</b> Texto transcrito para Certidão de Inteiro Teor.</li></ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        img_file = st.file_uploader("Foto do Livro/Documento", type=["png", "jpg", "jpeg"])
+        if img_file:
+            image = Image.open(img_file)
+            st.image(image, caption="Imagem Carregada", use_container_width=True)
+            if st.button("🔍 Extrair Texto", type="primary"):
+                with st.spinner("Processando OCR com IA Multimodal..."):
+                    res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o texto com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
+                    if "Limite de velocidade" in res:
+                        st.error(res)
+                    else:
+                        st.session_state.ocr_text = res
+                        add_xp(30)
+        
+        if st.session_state.ocr_text:
+            st.text_area("Texto Extraído:", st.session_state.ocr_text, height=400)
+            docx_ocr = create_generic_docx(st.session_state.ocr_text, "Transcrição de Livro")
+            if docx_ocr:
+                st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+
+    # --- 5. MÓDULO TRANSCRIÇÃO REAL (ATUALIZADO!) ---
+    elif menu == "🎙️ Transcrição":
+        st.title("🎙️ Transcrição de Áudio Real")
+        st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto Inteligente</h4><p>Envie o arquivo e a inteligência artificial fará a transcrição completa e a estruturação lógica do conteúdo.</p></div>""", unsafe_allow_html=True)
+        
+        audio_file = st.file_uploader("Arquivo de Áudio", type=["mp3", "wav", "m4a", "ogg"])
+        if audio_file:
+            st.audio(audio_file)
+            
+            if st.button("📝 Transcrever Áudio Real", type="primary"):
+                with st.spinner("Enviando arquivo para processamento neural..."):
+                    # Mapeia dinamicamente o tipo de arquivo
+                    mime = "audio/mp3" if audio_file.name.endswith("mp3") else "audio/wav"
+                    if audio_file.name.endswith("m4a"): mime = "audio/m4a"
+                    if audio_file.name.endswith("ogg"): mime = "audio/ogg"
+                    
+                    raw_data = audio_file.getvalue()
+                    
+                    system_instruction = "Você é um estenógrafo técnico e assessor jurídico especialista. Transcreva fielmente o áudio fornecido, organizando o texto em parágrafos coerentes. Se houver termos jurídicos, garanta a grafia correta."
+                    
+                    res = call_gemini(system_instruction, "Transcreva este áudio na íntegra.", audio_bytes=raw_data, audio_mime=mime)
+                    
+                    if "Limite de velocidade" in res:
+                        st.error(res)
+                    else:
+                        st.session_state.audio_text = res
+                        add_xp(40)
+        
+        if st.session_state.audio_text:
+            st.text_area("Resultado da Transcrição Real:", st.session_state.audio_text, height=300)
+            docx_audio = create_generic_docx(st.session_state.audio_text, "Transcrição Judicial Inteligente")
+            if docx_audio:
+                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
