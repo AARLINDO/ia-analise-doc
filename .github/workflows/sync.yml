@@ -1,7 +1,7 @@
 name: Sincronizar com o Hub do Hugging Face
 on:
   push:
-    branches: [main, principal]
+    branches: [main]
 
 jobs:
   sync:
@@ -13,4 +13,4 @@ jobs:
       - name: Enviar para o Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://ArthurCarmelio:$HF_TOKEN@huggingface.co/spaces/ArthurCarmelio/carmelio-ai principal:main
+        run: git push --force https://ArthurCarmelio:$HF_TOKEN@huggingface.co/spaces/ArthurCarmelio/carmelio-ai main:main
