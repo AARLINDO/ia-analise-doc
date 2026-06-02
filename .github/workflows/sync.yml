@@ -10,6 +10,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
+      - name: Remover imagens para evitar bloqueio
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git rm --cached carmelio_logo.png.png logo.jpg.png || true
+          git commit -m "Removendo imagens locais para deploy" || true
+
       - name: Enviar para o Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
