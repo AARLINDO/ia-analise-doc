@@ -745,6 +745,6 @@ else:
             st.text_area("Resultado da Transcrição Real:", st.session_state.audio_text, height=300)
             docx_audio = create_generic_docx(st.session_state.audio_text, "Transcrição Judicial Inteligente")
             if docx_audio:
-                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")```
+                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
 Limpe o código antigo, cole este bloco e clique em **Commit changes...**. O estúdio vai atualizar em alguns segundos com a nova logo oficial ativada perfeitamente na barra lateral!
