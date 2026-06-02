@@ -168,8 +168,7 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
     try:
-        text = text.replace("```json", "").replace("
-```", "")
+        text = text.replace("```json", "").replace("```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: 
             return json.loads(match.group(0))
