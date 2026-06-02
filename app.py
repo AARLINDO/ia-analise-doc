@@ -220,12 +220,12 @@ def get_daily_verse():
         {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas serão acrescentadas a vocês."},
         {"ref": "Salmos 46:1", "txt": "Deus é o nosso refúgio e a nossa fortaleza, auxílio sempre presente na adversidade."},
         {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age em todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
-        {"ref": "Provérbios 3:5", "txt": "Confie no Senhor di todo o seu coração e não se apóie em seu próprio entendimento."},
+        {"ref": "Provérbios 3:5", "txt": "Confie no Senhor de todo o seu coração e não se apóie em seu próprio entendimento."},
         {"ref": "Salmos 119:105", "txt": "A tua palavra é lâmpada que ilumina os meus passos e luz que clareia o meu caminho."},
         {"ref": "João 16:33", "txt": "No mundo vocês terão aflições; contudo, tenham ânimo! Eu venci o mundo."},
         {"ref": "Gálatas 6:9", "txt": "E não nos cansemos de fazer o bem, pois no tempo próprio colheremos, se não desanimarmos."},
         {"ref": "Salmos 27:1", "txt": "O Senhor é a minha luz e a minha salvação; de quem terei medo? O Senhor é a fortaleza da minha vida."},
-        {"ref": "Tiago 1:5", "txt": "Se algum de vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade."},
+        {"ref": "Tiago 1:5", "txt": "Se algum di vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade."},
         {"ref": "Romanos 12:12", "txt": "Alegrem-se na esperança, sejam pacientes na tribulação, perseverem na oração."},
         {"ref": "1 Coríntios 16:14", "txt": "Façam tudo com amor."},
         {"ref": "Salmos 34:17", "txt": "Os justos clamam, o Senhor os ouve e os livra de todas as suas tribulações."},
@@ -234,7 +234,7 @@ def get_daily_verse():
         {"ref": "Deuteronômio 31:6", "txt": "Sejam fortes e corajosos. Não tenham medo nem fiquem apavorados por causa deles, pois o Senhor, o seu Deus, vai com vocês."},
         {"ref": "Colossenses 3:23", "txt": "Tudo o que fizerem, façam de todo o coração, como para o Senhor, e não para os homens."},
         {"ref": "Salmos 118:24", "txt": "Este é o dia que o Senhor fez; exultemos e alegremo-nos nele."},
-        {"ref": "1 Pedro 5:7", "txt": "Lancem sobre ele toda a sua ansiedade, porque ele tem cuidado di vocês."},
+        {"ref": "1 Pedro 5:7", "txt": "Lancem sobre ele toda a sua ansiedade, porque ele tem cuidado de vocês."},
         {"ref": "Provérbios 4:23", "txt": "Acima de tudo o que deve ser preservado, guarde o seu coração, porque dele procedem as fontes da vida."},
         {"ref": "Efésios 6:10", "txt": "Finalmente, fortaleçam-se no Senhor e no seu forte poder."},
         {"ref": "Salmos 139:14", "txt": "Eu te louvo porque me fizeste de modo especial e admirable. Tuas obras são maravilhosas!"}
@@ -453,7 +453,8 @@ def render_sidebar_widgets():
 # 5. EXECUÇÃO PRINCIPAL
 # =============================================================================
 with st.sidebar:
-    safe_image_show("logo.jpg.png")
+    # ATUALIZADO: Usando o nome exato da nova imagem salva
+    safe_image_show("carmelio_logo.png.png")
     render_sidebar_widgets()
     st.markdown("---")
     
@@ -745,3 +746,7 @@ else:
             docx_audio = create_generic_docx(st.session_state.audio_text, "Transcrição Judicial Inteligente")
             if docx_audio:
                 st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+
+```
+
+Limpe o código antigo, cole este bloco e clique em **Commit changes...**. O estúdio vai atualizar em alguns segundos com a nova logo oficial ativada perfeitamente na barra lateral!
