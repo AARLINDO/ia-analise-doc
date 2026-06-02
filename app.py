@@ -132,7 +132,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 
 def extract_json_surgical(text):
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: return json.loads(match.group(0))
     except: pass
@@ -226,7 +227,6 @@ st.markdown("""
     .footer-credits { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #2B2F3B; color: #6B7280; font-size: 11px; }
     .footer-credits strong { color: #E0E0E0; }
     .onboarding-box { background-color: #1F2430; padding: 20px; border-radius: 10px; border-left: 5px solid #4285F4; margin-bottom: 20px; }
-    .paywall-box { background: linear-gradient(135deg, #2e1065, #1e1b4b); padding: 20px; border-radius: 10px; border: 2px solid #7c3aed; text-align: center; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -270,11 +270,9 @@ with st.sidebar:
     render_sidebar_widgets()
     st.markdown("---")
     
-    password_input = st.text_input("Chave do Estúdio (Premium):", type="password", placeholder="Insira a senha master")
-    studio_authorized = (password_input == st.secrets.get("STUDIO_PASSWORD", "1234"))
-    
-    if not studio_authorized:
-        st.warning("🔒 Insira a Chave para liberar as ferramentas Premium.")
+    # ACESSO DIRETO ATIVADO: Senha removida para máxima atração e viralização
+    studio_authorized = True
+    st.success("🔓 Acesso Livre Ativado!")
     
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
@@ -286,31 +284,29 @@ with st.sidebar:
     ], label_visibility="collapsed")
     
     st.markdown("---")
-    st.write(f"📊 **Treinos Gratuitos Hoje:** {st.session_state.oab_click_count}/5")
+    st.write(f"📊 **Questões Respondidas:** {st.session_state.oab_stats['total']}")
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
+# Mantido por compatibilidade interna do app
 def verificar_acesso_premium():
-    if not studio_authorized:
-        st.info("### 🔐 Recursos Avançados Restritos\nEste módulo faz parte do ecossistema premium do Carmélio AI. Para liberá-lo, insira a **Chave do Estúdio** na barra lateral esquerda.")
-        return False
     return True
 
 # =============================================================================
-# 6. RENDERIZAÇÃO DAS TELAS (MÓDULO OAB REMODELADO COM RADAR E HISTÓRICO)
+# 6. RENDERIZAÇÃO DAS TELAS
 # =============================================================================
 
 if menu == "🎓 Gabaritando a OAB":
     st.title("🎓 Ecossistema de Aprovação OAB 47")
     
-    # Criação das 5 Abas Estratégicas para Retenção
+    # Abas Estratégicas para o Aluno se Manter Conectado
     t1, t2, t3, t4, t5 = st.tabs([
         "🎯 1ª Fase - Simulador FGV", "📊 Meu Desempenho & Coach", 
         "✍️ 2ª Fase - Corretora", "📚 Caderno de Erros", "⭐ Favoritas"
     ])
     
     with t1:
-        st.markdown('<div class="onboarding-box"><h4>🎯 Projeto 40 Acertos</h4><p>Monitore sua evolução na aba de desempenho. Questões salvas com análise neural avançada.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="onboarding-box"><h4>🎯 Projeto 40 Acertos</h4><p>Treine com inteligência artificial direto no banco oficial da FGV. Monitore suas estatísticas na aba ao lado.</p></div>', unsafe_allow_html=True)
         
         materias_oab = [
             "Simulado Geral (Todas as Matérias)", "Ética Profissional", "Direito Constitucional", 
@@ -318,7 +314,6 @@ if menu == "🎓 Gabaritando a OAB":
         ]
 
         def gerar_questao_oab(materia_selecionada):
-            if st.session_state.oab_click_count >= 5 and not studio_authorized: return
             st.session_state["oab_quiz_data"] = None
             st.session_state["oab_show_answer"] = False
             st.session_state.oab_click_count += 1
@@ -328,7 +323,6 @@ if menu == "🎓 Gabaritando a OAB":
                 prompt = f"""
                 ROLE: Professor Especialista em OAB da FGV.
                 TASK: Forneça uma QUESTÃO REAL E OFICIAL de exames passados da OAB aplicada pela banca FGV, {filtro}.
-                CRITICAL INSTRUCTION FOR OUTPUT STRUCTURE: Você deve quebrar as explicações estritamente nos campos solicitados no JSON abaixo.
                 JSON Output Format: {{
                     'exame': 'Exame OAB FGV',
                     'materia': '...',
@@ -350,13 +344,9 @@ if menu == "🎓 Gabaritando a OAB":
             mat_escolhida = st.selectbox("Escolha a disciplina para treinar:", materias_oab, key="sb_oab_new")
         with col_b:
             st.write(""); st.write("")
-            limite_blq = st.session_state.oab_click_count >= 5 and not studio_authorized
-            if st.button("🚀 TRAZER QUESTÃO", type="primary", use_container_width=True, disabled=limite_blq, key="btn_oab_new"):
+            if st.button("🚀 TRAZER QUESTÃO", type="primary", use_container_width=True, key="btn_oab_new"):
                 gerar_questao_oab(mat_escolhida)
                 st.rerun()
-
-        if limite_blq:
-            st.markdown('<div class="paywall-box"><h3>🔒 Limite Diário Atingido!</h3><p>Insira sua <b>Chave do Estúdio Premium</b> na barra lateral esquerda para destravar questões ilimitadas, corretora de peças da segunda fase e o mentor inteligente!</p></div>', unsafe_allow_html=True)
 
         if st.session_state.get("oab_quiz_data") is not None:
             q = st.session_state["oab_quiz_data"]
@@ -380,7 +370,7 @@ if menu == "🎓 Gabaritando a OAB":
                 u, c = st.session_state["oab_choice"], q['correta']
                 is_correct = (u == c)
                 
-                # --- GRAVAÇÃO DOS DADOS NO RADAR DE DESEMPENHO E HISTÓRICO ---
+                # Gravação dos dados no Radar de Desempenho e Histórico
                 if "oab_processed" not in st.session_state:
                     st.session_state.oab_stats["total"] += 1
                     if is_correct:
@@ -407,7 +397,7 @@ if menu == "🎓 Gabaritando a OAB":
                 else:
                     st.error(f"Faltou pouco! Resposta correta: Letra {c}")
 
-                # Renderização da Nova Correção Inteligente por Módulos
+                # Correção Avançada Estruturada
                 with st.container(border=True):
                     st.markdown("#### 📚 Correção Avançada da IA")
                     st.write(q.get('fundamentacao', 'Sem fundamentação disponível.'))
@@ -423,7 +413,7 @@ if menu == "🎓 Gabaritando a OAB":
 
     with t2:
         st.subheader("📊 Radar de Performance OAB")
-        st.write("Acompanhe suas métricas de desempenho em tempo real para o Exame de Ordem.")
+        st.write("Métricas de monitoramento tático em tempo real.")
         
         st_t = st.session_state.oab_stats["total"]
         st_a = st.session_state.oab_stats["acertos"]
@@ -438,69 +428,69 @@ if menu == "🎓 Gabaritando a OAB":
             taxa_calculada = round((st_a / st_t) * 100, 1)
             st.metric("Taxa de Acertos Geral", f"{taxa_calculada}%")
             
-            # --- CÁCULO DE PROBABILIDADE DE APROVAÇÃO ---
+            # Diagnóstico de Probabilidade de Aprovação
             st.markdown("### 📈 Diagnóstico Real de Aprovação")
             if st_t < 10:
-                st.info("ℹ️ Responda pelo menos 10 questões para o algoritmo calcular sua probabilidade matemática de aprovação.")
+                st.info("ℹ️ Responda pelo menos 10 questões para o sistema calcular sua probabilidade de aprovação.")
             else:
                 if taxa_calculada >= 75:
-                    st.success(f"🔥 **Excelente chance de aprovação ({taxa_calculada}%):** Sua base conceitual está extremamente sólida. Continue treinando simulados.")
+                    st.success(f"🔥 **Excelente chance de aprovação ({taxa_calculada}%):** Sua base de dados conceitual está sólida. Continue firme nos simulados!")
                 elif taxa_calculada >= 55:
-                    st.warning(f"⚠️ **Zona de Atenção ({taxa_calculada}%):** Você está próximo da aprovação, mas ainda oscilando. Revise o caderno de erros.")
+                    st.warning(f"⚠️ **Zona de Atenção ({taxa_calculada}%):** Você está muito perto, mas oscilando. Force revisões cirúrgicas no seu caderno de erros.")
                 else:
-                    st.error(f"🚨 **Alerta Vermelho ({taxa_calculada}%):** Risco alto de reprovação na 1ª fase. Use o Coach IA abaixo para reestruturar seu foco.")
+                    st.error(f"🚨 **Alerta de Risco ({taxa_calculada}%):** Risco alto de reprovação se a prova fosse hoje. Intensifique o uso do Coach IA logo abaixo.")
 
-            # Recurso Viral: Compartilhamento de Desempenho
+            # Compartilhamento de Desempenho (Pillow)
             st.markdown("---")
-            st.markdown("#### 📸 Compartilhe sua performance no Insta!")
+            st.markdown("#### 📸 Compartilhe suas conquistas no Instagram!")
             card_btn = generate_performance_card(st_a, st_t, taxa_calculada)
             if card_btn:
                 st.download_button("📸 Baixar Card de Desempenho", card_btn, "Desempenho_OAB.png", "image/png")
         else:
-            st.info("Ainda não existem estatísticas gravadas para esta sessão.")
+            st.info("Comece a treinar na aba ao lado para gerar seu radar estatístico.")
 
-        # --- NOVO MÓDULO: COACH IA PLANO DE ESTUDOS ---
+        # Módulo Integrado de Coach de Estudos
         st.markdown("---")
-        st.subheader("🎯 Coach IA: Cronograma por Peso de Matéria")
-        st.write("Deixe a IA organizar seu tempo de estudo focado unicamente no que a FGV mais cobra.")
+        st.subheader("🎯 Coach IA: Cronograma Tático Automatizado")
+        st.write("A inteligência artificial organiza suas horas baseada estritamente no peso estatístico da banca.")
         
         cc1, cc2 = st.columns(2)
-        dias_r = cc1.number_input("Dias restantes até a prova:", min_value=1, max_value=365, value=45)
-        horas_d = cc2.slider("Horas disponíveis de estudo por dia:", 1, 12, 3)
+        dias_r = cc1.number_input("Dias até a prova da OAB:", min_value=1, max_value=365, value=45)
+        horas_d = cc2.slider("Horas por dia que você pretende dedicar:", 1, 12, 3)
         
         if st.button("🗺️ GERAR MEU CRONOGRAMA INTEGRADO", type="primary"):
-            with st.spinner("IA processando estatísticas de recorrência da FGV..."):
+            with st.spinner("IA calculando pontos de recorrência da FGV..."):
                 prompt_coach = f"Crie um planejamento estratégico de estudos para a OAB 1ª Fase. Dias disponíveis: {dias_r}, Horas por dia: {horas_d}. Distribua o tempo dando prioridade máxima para Ética (8 questões), Constitucional, Administrativo, Civil e Penal. Retorne em formato Markdown estruturado."
                 st.session_state.coach_cronograma = call_gemini("Você é um Coach Mentor especialista em Exame de Ordem.", prompt_coach)
         
         if st.session_state.coach_cronograma:
             st.markdown(st.session_state.coach_cronograma)
 
-        # Histórico das últimas 20 questões respondidas
+        # Histórico Recente (Atrativo Psicológico de Retenção)
         st.markdown("---")
-        st.subheader("📋 Histórico Recente (Últimas 20)")
+        st.subheader("📋 Histórico de Treinos (Últimas 20)")
         if st.session_state.historico_oab:
             for item in reversed(st.session_state.historico_oab[-20:]):
                 status_h = "✅ Acertou" if item["acertou"] else "❌ Errou"
                 st.write(f"• **[{item['data']}]** {item['materia']} — {status_h}")
         else:
-            st.caption("Nenhuma questão no histórico.")
+            st.caption("Histórico vazio.")
 
     with t3:
         st.subheader("🤖 Banca Examinadora: Peças Processuais 2ª Fase")
         area_2f = st.selectbox("Área do Exame:", ["Direito Penal", "Direito Civil", "Direito Constitucional", "Direito do Trabalho"])
-        peca_txt = st.text_area("Cole sua peça simulada para escaneamento da banca:", height=300)
+        peca_txt = st.text_area("Cole sua peça simulada para escaneamento estrutural da banca:", height=300)
         if st.button("⚖️ ANALISAR PEÇA", type="primary"):
             if peca_txt:
                 with st.spinner("Avaliando técnica estrutural e adequação de pedidos..."):
-                    res_peca = call_gemini("Membro da banca examinadora FGV.", f"Dê nota de 0 a 5.0 e aponte erros estruturais e de fundamentação na peça: \n{peca_txt}")
+                    res_peca = call_gemini("Membro da banca examinadora FGV.", f"Dê nota de 0 a 5.0 e aponte erros estruturais e de fundamentação na peça de {area_2f}: \n{peca_txt}")
                     st.markdown(res_peca)
             else: st.error("Cole o texto da peça jurídica.")
 
     with t4:
         st.subheader("📚 Caderno de Erros Inteligente")
         if not st.session_state.caderno_erros:
-            st.info("Parabéns! Seu caderno está zerado. Erros cometidos no simulador serão indexados aqui automaticamente.")
+            st.info("Seu caderno está limpo! Erros cometidos no simulador da 1ª fase salvam automaticamente aqui para revisão posterior.")
         else:
             for i, err in enumerate(st.session_state.caderno_erros):
                 with st.expander(f"❌ Questão {i+1} - Matéria: {err.get('materia')}"):
@@ -511,7 +501,7 @@ if menu == "🎓 Gabaritando a OAB":
     with t5:
         st.subheader("⭐ Minhas Questões Favoritas")
         if not st.session_state.favoritas:
-            st.info("Você ainda não salvou nenhuma questão. Use o botão 'Salvar nas Favoritas' durante seus simulados.")
+            st.info("Você ainda não salvou nenhuma questão. Marque as mais complexas no simulador principal.")
         else:
             for idx, fav in enumerate(st.session_state.favoritas):
                 with st.expander(f"⭐ Favorita {idx+1} | {fav.get('materia')}"):
@@ -519,111 +509,111 @@ if menu == "🎓 Gabaritando a OAB":
                     st.info(f"Gabarito Correto: {fav['correta']}")
                     st.write(fav.get('fundamentacao'))
 
-# -----------------------------------------------------------------------------
-# OS DEMAIS MÓDULOS NÃO JURÍDICOS FORAM MANTIDOS INTACTOS CONFORME SEU SCRIPT ORIGINAL
-# -----------------------------------------------------------------------------
+# =============================================================================
+# MÓDULOS DE ECOSSISTEMA JURÍDICO (100% LIBERADOS - ACESSO DIRETO)
+# =============================================================================
+
 elif menu == "✨ Chat Inteligente":
-    if verificar_acesso_premium():
-        st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
-        if not st.session_state.chat_history: 
-            st.markdown("""<div class="onboarding-box"><h4>👋 Olá!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência?</p></div>""", unsafe_allow_html=True)
-        for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
-        if p := st.chat_input("Digite..."):
-            st.session_state.chat_history.append({"role": "user", "content": p})
-            with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
-            with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("Analisando..."):
-                    history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
-                    res = call_gemini("Advogado Sênior.", history, use_search=True)
-                    st.write(res)
-                    st.session_state.chat_history.append({"role": "assistant", "content": res})
-                    add_xp(5)
+    st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
+    if not st.session_state.chat_history: 
+        st.markdown("""<div class="onboarding-box"><h4>👋 Bem-vindo ao Modo Direto</h4><p>Sou seu <b>Mentor Jurídico</b> de acesso livre. Dúvidas, consultas, petições ou jurisprudências? Estou pronto.</p></div>""", unsafe_allow_html=True)
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
+    if p := st.chat_input("Digite sua dúvida legal aqui..."):
+        st.session_state.chat_history.append({"role": "user", "content": p})
+        with st.chat_message("user", avatar="🧑‍⚖️"): st.write(p)
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Analisando bases..."):
+                history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-6:]])
+                res = call_gemini("Advogado Sênior experiente.", history, use_search=True)
+                st.write(res)
+                st.session_state.chat_history.append({"role": "assistant", "content": res})
+                add_xp(5)
 
 elif menu == "📝 Gere seu Contrato":
-    if verificar_acesso_premium():
-        st.title("📝 Gere seu Contrato")
-        step = st.session_state.contract_step
-        c1, c2, c3 = st.columns([1,1,1])
-        c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
-        c2.markdown(f"**2. Minuta** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
-        c3.markdown(f"**3. Baixar** {'✅' if step > 3 else ('🟦' if step==3 else '⬜')}")
-        st.progress(int(step/3 * 100))
+    st.title("📝 Gerador Inteligente de Contratos")
+    step = st.session_state.contract_step
+    c1, c2, c3 = st.columns([1,1,1])
+    c1.markdown(f"**1. Dados** {'✅' if step > 1 else '🟦'}")
+    c2.markdown(f"**2. Minuta** {'✅' if step > 2 else ('🟦' if step==2 else '⬜')}")
+    c3.markdown(f"**3. Baixar** {'✅' if step > 3 else ('🟦' if step==3 else '⬜')}")
+    st.progress(int(step/3 * 100))
 
-        if step == 1:
-            with st.container(border=True):
-                tipo = st.selectbox("Modelo:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel"])
-                partes = st.text_area("Partes")
-                objeto = st.text_area("Objeto")
-                if st.button("Gerar Minuta ➔", type="primary", use_container_width=True):
-                    if partes and objeto:
-                        with st.spinner("Redigindo..."):
-                            prompt = f"Crie contrato de {tipo}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
-                            res = call_gemini("JSON only.", prompt, json_mode=True)
-                            data = extract_json_surgical(res)
-                            if data and 'clauses' in data:
-                                st.session_state.contract_meta = {"tipo": tipo, "partes": partes, "objeto": objeto}
-                                st.session_state.contract_clauses = data['clauses']
-                                st.session_state.contract_step = 2
-                                add_xp(25)
-                                st.rerun()
-        elif step == 2:
-            st.header("📑 Revisão")
-            for i, c in enumerate(st.session_state.contract_clauses):
-                with st.expander(f"{i+1}. {c.get('titulo')}"):
-                    nt = st.text_input("Título", c['titulo'], key=f"t{i}")
-                    nc = st.text_area("Conteúdo", c['conteudo'], key=f"c{i}")
-                    st.session_state.contract_clauses[i] = {"titulo": nt, "conteudo": nc}
-            if st.button("Finalizar ➔", type="primary"):
-                st.session_state.contract_step = 3
-                st.rerun()
-        elif step == 3:
-            st.header("✅ Pronto")
-            dx = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
-            if dx: st.download_button("💾 Baixar DOCX", dx, "Contrato.docx", type="primary")
+    if step == 1:
+        with st.container(border=True):
+            tipo = st.selectbox("Modelo Contratual:", ["Prestação de Serviços", "Locação de Imóvel", "Compra e Venda Imóvel", "Outro"])
+            partes = st.text_area("Qualificação Completa das Partes:")
+            objeto = st.text_area("Descreva detalhadamente o Objeto e Valores:")
+            if st.button("Gerar Minuta Estrutural ➔", type="primary", use_container_width=True):
+                if partes and objeto:
+                    with st.spinner("Redigindo cláusulas com IA jurídica..."):
+                        prompt = f"Crie contrato de {tipo}. Partes: {partes}. Objeto: {objeto}. JSON: {{'clauses': [{{'titulo': '...', 'conteudo': '...'}}]}}"
+                        res = call_gemini("JSON only.", prompt, json_mode=True)
+                        data = extract_json_surgical(res)
+                        if data and 'clauses' in data:
+                            st.session_state.contract_meta = {"tipo": tipo, "partes": partes, "objeto": objeto}
+                            st.session_state.contract_clauses = data['clauses']
+                            st.session_state.contract_step = 2
+                            add_xp(25)
+                            st.rerun()
+    elif step == 2:
+        st.header("📑 Revisão de Cláusulas")
+        for i, c in enumerate(st.session_state.contract_clauses):
+            with st.expander(f"Cláusula: {c.get('titulo')}"):
+                nt = st.text_input("Título", c['titulo'], key=f"t{i}")
+                nc = st.text_area("Conteúdo", c['conteudo'], key=f"c{i}")
+                st.session_state.contract_clauses[i] = {"titulo": nt, "conteudo": nc}
+        if st.button("Finalizar Documento ➔", type="primary"):
+            st.session_state.contract_step = 3
+            st.rerun()
+    elif step == 3:
+        st.header("✅ Documento Pronto")
+        dx = create_contract_docx(st.session_state.contract_clauses, st.session_state.contract_meta)
+        if dx: st.download_button("💾 Baixar Minuta em Word (.docx)", dx, "Contrato_CarmelioAI.docx", type="primary")
 
 elif menu == "🎯 Mestre dos Editais":
-    if verificar_acesso_premium():
-        st.title("🎯 Mestre dos Editais")
-        if not st.session_state.edital_text:
-            f = st.file_uploader("Upload PDF do Edital", type=["pdf"])
-            if f and f.name != st.session_state.edital_filename:
-                with st.spinner("Escaneando anexos..."):
-                    txt = read_pdf_safe(f)
-                    if txt:
-                        st.session_state.edital_text = txt
-                        st.session_state.edital_filename = f.name
-                        st.rerun()
-        else:
-            st.success(f"📂 Arquivo Ativo: {st.session_state.edital_filename}")
-            if st.button("🗑️ Trocar Edital"):
-                st.session_state.edital_text = ""
-                st.rerun()
+    st.title("🎯 Mestre dos Editais")
+    if not st.session_state.edital_text:
+        st.markdown('<div class="onboarding-box"><h4>🚀 Simulação Contextual de Editais</h4><p>Suba o PDF de qualquer concurso público e a inteligência artificial criará perguntas focadas puramente no conteúdo programático.</p></div>', unsafe_allow_html=True)
+        f = st.file_uploader("Upload PDF do Edital", type=["pdf"])
+        if f and f.name != st.session_state.edital_filename:
+            with st.spinner("Escaneando anexos de conhecimentos específicos..."):
+                txt = read_pdf_safe(f)
+                if txt:
+                    st.session_state.edital_text = txt
+                    st.session_state.edital_filename = f.name
+                    st.rerun()
+    else:
+        st.success(f"📂 Arquivo Ativo: {st.session_state.edital_filename}")
+        if st.button("🗑️ Trocar Edital"):
+            st.session_state.edital_text = ""
+            st.rerun()
 
 elif menu == "🏢 Cartório OCR":
-    if verificar_acesso_premium():
-        st.title("🏢 Cartório OCR (Digitalizador)")
-        img_file = st.file_uploader("Foto do Livro/Documento", type=["png", "jpg", "jpeg"])
-        if img_file:
-            image = Image.open(img_file)
-            st.image(image, use_container_width=True)
-            if st.button("🔍 Extrair Texto", type="primary"):
-                with st.spinner("Processando OCR..."):
-                    res = call_gemini("Especialista em OCR cartorial.", "Transcreva.", image=image)
-                    st.session_state.ocr_text = res
-                    add_xp(30)
-        if st.session_state.ocr_text: st.text_area("Texto Extraído:", st.session_state.ocr_text, height=300)
+    st.title("🏢 Cartório OCR (Digitalizador de Livros)")
+    st.markdown('<div class="onboarding-box"><h4>📸 Transcrição Multimodal</h4><p>Otimizado para extrair textos de páginas de livros de registro antigos e certidões com alta precisão.</p></div>', unsafe_allow_html=True)
+    img_file = st.file_uploader("Enviar Foto nítida do documento/página:", type=["png", "jpg", "jpeg"])
+    if img_file:
+        image = Image.open(img_file)
+        st.image(image, use_container_width=True)
+        if st.button("🔍 Extrair Texto Completo", type="primary"):
+            with st.spinner("Processando OCR neural..."):
+                res = call_gemini("Especialista em OCR cartorial e transcrição de livros.", "Transcreva mantendo fielmente pontuações e parágrafos.", image=image)
+                st.session_state.ocr_text = res
+                add_xp(30)
+    if st.session_state.ocr_text: 
+        st.text_area("Texto Extraído:", st.session_state.ocr_text, height=300)
 
 elif menu == "🎙️ Transcrição":
-    if verificar_acesso_premium():
-        st.title("🎙️ Transcrição de Áudio")
-        audio_file = st.file_uploader("Arquivo de Áudio", type=["mp3", "wav", "m4a"])
-        if audio_file:
-            st.audio(audio_file)
-            if st.button("📝 Transcrever", type="primary"):
-                with st.spinner("Transcrevendo..."):
-                    mime = "audio/mp3" if audio_file.name.endswith("mp3") else "audio/wav"
-                    res = call_gemini("Transcreva organizando em parágrafos.", "Transcreva.", audio_bytes=audio_file.getvalue(), audio_mime=mime)
-                    st.session_state.audio_text = res
-                    add_xp(40)
-        if st.session_state.audio_text: st.text_area("Resultado:", st.session_state.audio_text, height=250)
+    st.title("🎙️ Transcrição de Áudio Real")
+    audio_file = st.file_uploader("Carregar arquivo de áudio (Audiências, depoimentos, reuniões):", type=["mp3", "wav", "m4a"])
+    if audio_file:
+        st.audio(audio_file)
+        if st.button("📝 Iniciar Transcrição Inteligente", type="primary"):
+            with st.spinner("Processando ondas sonoras..."):
+                mime = "audio/mp3" if audio_file.name.endswith("mp3") else "audio/wav"
+                res = call_gemini("Transcreva organizando em parágrafos e corrigindo terminologias do direito.", "Transcreva o áudio.", audio_bytes=audio_file.getvalue(), audio_mime=mime)
+                st.session_state.audio_text = res
+                add_xp(40)
+    if st.session_state.audio_text: 
+        st.text_area("Resultado:", st.session_state.audio_text, height=250)
