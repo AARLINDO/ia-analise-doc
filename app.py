@@ -747,4 +747,3 @@ else:
             if docx_audio:
                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
-Limpe o código antigo, cole este bloco e clique em **Commit changes...**. O estúdio vai atualizar em alguns segundos com a nova logo oficial ativada perfeitamente na barra lateral!
