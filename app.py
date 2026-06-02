@@ -1,3 +1,24 @@
+Putz, Arthur! Olhando agora o seu print da tela real (`image_b95795.png`), acabei de ver o detalhe que deixei passar.
+
+O problema de "não mudar" ou não salvar o estado no seu código não é erro de lógica dentro do JavaScript. O buraco é um pouco mais embaixo: **é o comportamento padrão de re-renderização do Streamlit.**
+
+### O Diagnóstico Técnico do Erro
+
+No Streamlit, toda vez que você interage com qualquer coisa na tela (digita a senha master, muda de aba no menu, clica em um botão, etc.), o script Python inteiro roda de novo do topo ao fundo.
+
+Como o seu Pomodoro HTML/JS está envelopado dentro de um `components.html(...)`, quando o Streamlit atualiza a página, ele **destrói o componente antigo e renderiza um novo frame HTML do zero**. O JavaScript perde as variáveis da memória interna dele e reseta para o valor fixo inicial (`25 * 60`), limpando o intervalo que estava rodando!
+
+Como você está com a tela bloqueada por senha na imagem `image_b95795.png`, na hora que você digita a senha master para liberar os módulos, o Streamlit recarrega tudo e "mata" o cronômetro que você tinha iniciado.
+
+---
+
+### A Solução Definitiva
+
+Para que o timer sobreviva a atualizações e guarde se está em modo Foco ou Intervalo, precisamos fazer o JavaScript salvar o progresso no armazenamento interno do seu navegador (**`localStorage`**). Assim, mesmo que o Streamlit force a barra lateral a recarregar mil vezes, o JavaScript recupera o tempo exato onde parou de forma independente.
+
+Aqui está o código completo do estúdio atualizado com essa correção cirúrgica. Pode copiar tudo:
+
+```python
 import streamlit as st
 import streamlit.components.v1 as components
 import os
@@ -41,7 +62,7 @@ except ImportError:
 try: 
     from PIL import Image
 except ImportError: 
-    Image = None
+    image = None
 
 # Inicialização de Estado (Session State)
 keys = {
@@ -147,7 +168,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: 
             return json.loads(match.group(0))
@@ -219,7 +241,7 @@ def get_daily_verse():
         {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças. Voam bem alto como águias; correm e não ficam exaustos."},
         {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas serão acrescentadas a vocês."},
         {"ref": "Salmos 46:1", "txt": "Deus é o nosso refúgio e a nossa fortaleza, auxílio sempre presente na adversidade."},
-        {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age in todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
+        {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age em todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
         {"ref": "Provérbios 3:5", "txt": "Confie no Senhor de todo o seu coração e não se apóie em seu próprio entendimento."},
         {"ref": "Salmos 119:105", "txt": "A tua palavra é lâmpada que ilumina os meus passos e luz que clareia o meu caminho."},
         {"ref": "João 16:33", "txt": "No mundo vocês terão aflições; contudo, tenham ânimo! Eu venci o mundo."},
@@ -396,9 +418,12 @@ def render_sidebar_widgets():
         const FOCO_TIME = 25 * 60;
         const INTERVALO_TIME = 5 * 60;
         
-        let time = FOCO_TIME;
         let interval = null;
-        let isModeFoco = true;
+
+        // Recupera valores antigos salvos no LocalStorage caso a página recarregue
+        let time = localStorage.getItem('pomodoro_time') ? parseInt(localStorage.getItem('pomodoro_time')) : FOCO_TIME;
+        let isModeFoco = localStorage.getItem('pomodoro_mode') === 'false' ? false : true;
+        let isRunning = localStorage.getItem('pomodoro_running') === 'true' ? true : false;
 
         function updateDisplay() {{
             let m = Math.floor(time / 60);
@@ -407,16 +432,23 @@ def render_sidebar_widgets():
             document.getElementById('timer').innerText =
             (m < 10 ? '0' : '') + m + ':' +
             (s < 10 ? '0' : '') + s;
+
+            // Mantém a cor certa baseada no modo após a re-renderização do Streamlit
+            document.getElementById('timer').style.color = isModeFoco ? '#4285F4' : '#34D399';
+            document.getElementById('status').innerText = isRunning ? (isModeFoco ? 'Focando...' : 'Descansando...') : 'Pausado';
         }}
 
         function startTimer() {{
             if(interval) return;
-
+            
+            isRunning = true;
+            localStorage.setItem('pomodoro_running', 'true');
             document.getElementById('status').innerText = isModeFoco ? 'Focando...' : 'Descansando...';
 
             interval = setInterval(() => {{
                 if(time > 0) {{
                     time--;
+                    localStorage.setItem('pomodoro_time', time);
                     updateDisplay();
                 }}
                 else {{
@@ -426,17 +458,16 @@ def render_sidebar_widgets():
                     if(isModeFoco) {{
                         isModeFoco = false;
                         time = INTERVALO_TIME;
-                        document.getElementById('timer').style.color = '#34D399';
-                        document.getElementById('status').innerText = 'Hora do intervalo!';
+                        localStorage.setItem('pomodoro_mode', 'false');
                         alert('Bora levantar da cadeira! Hora do Intervalo.');
                     }} else {{
                         isModeFoco = true;
                         time = FOCO_TIME;
-                        document.getElementById('timer').style.color = '#4285F4';
-                        document.getElementById('status').innerText = 'Volta ao trabalho!';
+                        localStorage.setItem('pomodoro_mode', 'true');
                         alert('Intervalo acabou! Foco total agora.');
                     }}
                     
+                    localStorage.setItem('pomodoro_time', time);
                     updateDisplay();
                     startTimer();
                 }}
@@ -446,6 +477,8 @@ def render_sidebar_widgets():
         function pauseTimer() {{
             clearInterval(interval);
             interval = null;
+            isRunning = false;
+            localStorage.setItem('pomodoro_running', 'false');
             document.getElementById('status').innerText = 'Pausado';
         }}
 
@@ -453,9 +486,17 @@ def render_sidebar_widgets():
             pauseTimer();
             isModeFoco = true;
             time = FOCO_TIME;
-            document.getElementById('timer').style.color = '#4285F4';
+            localStorage.setItem('pomodoro_time', FOCO_TIME);
+            localStorage.setItem('pomodoro_mode', 'true');
+            localStorage.setItem('pomodoro_running', 'false');
             updateDisplay();
             document.getElementById('status').innerText = 'Pronto';
+        }}
+
+        // Inicializa o display na carga e continua rodando automaticamente se já estava ativo
+        updateDisplay();
+        if (isRunning) {{
+            startTimer();
         }}
     </script>
     """
@@ -757,3 +798,7 @@ else:
             docx_audio = create_generic_docx(st.session_state.audio_text, "Transcrição Judicial Inteligente")
             if docx_audio:
                st.download_button("💾 Baixar Transcrição (Word)", docx_audio, "Transcricao_Real.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+
+```
+
+```
