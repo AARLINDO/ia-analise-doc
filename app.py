@@ -1,24 +1,3 @@
-Putz, Arthur! Olhando agora o seu print da tela real (`image_b95795.png`), acabei de ver o detalhe que deixei passar.
-
-O problema de "não mudar" ou não salvar o estado no seu código não é erro de lógica dentro do JavaScript. O buraco é um pouco mais embaixo: **é o comportamento padrão de re-renderização do Streamlit.**
-
-### O Diagnóstico Técnico do Erro
-
-No Streamlit, toda vez que você interage com qualquer coisa na tela (digita a senha master, muda de aba no menu, clica em um botão, etc.), o script Python inteiro roda de novo do topo ao fundo.
-
-Como o seu Pomodoro HTML/JS está envelopado dentro de um `components.html(...)`, quando o Streamlit atualiza a página, ele **destrói o componente antigo e renderiza um novo frame HTML do zero**. O JavaScript perde as variáveis da memória interna dele e reseta para o valor fixo inicial (`25 * 60`), limpando o intervalo que estava rodando!
-
-Como você está com a tela bloqueada por senha na imagem `image_b95795.png`, na hora que você digita a senha master para liberar os módulos, o Streamlit recarrega tudo e "mata" o cronômetro que você tinha iniciado.
-
----
-
-### A Solução Definitiva
-
-Para que o timer sobreviva a atualizações e guarde se está em modo Foco ou Intervalo, precisamos fazer o JavaScript salvar o progresso no armazenamento interno do seu navegador (**`localStorage`**). Assim, mesmo que o Streamlit force a barra lateral a recarregar mil vezes, o JavaScript recupera o tempo exato onde parou de forma independente.
-
-Aqui está o código completo do estúdio atualizado com essa correção cirúrgica. Pode copiar tudo:
-
-```python
 import streamlit as st
 import streamlit.components.v1 as components
 import os
