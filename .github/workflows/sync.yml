@@ -1,7 +1,7 @@
 name: Sincronizar com o Hub do Hugging Face
 on:
   push:
-    branches: [principal]
+    branches: [main, principal]
 
 jobs:
   sync:
