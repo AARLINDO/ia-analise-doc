@@ -43,12 +43,15 @@ try:
 except ImportError: 
     Image = None
 
-# Inicialização de Estado (Session State)
+# Inicialização de Estado (Session State) com as chaves OAB corrigidas
 keys = {
     "user_xp": 0, "contract_step": 1, "contract_clauses": [], 
     "contract_meta": {}, "chat_history": [], "edital_text": "", 
     "edital_filename": "", "quiz_data": None, "quiz_show_answer": False, 
-    "user_choice": None, "ocr_text": "", "last_call": 0, "audio_text": ""
+    "user_choice": None, "ocr_text": "", "last_call": 0, "audio_text": "",
+    "oab_quiz_data": None, 
+    "oab_show_answer": False, 
+    "oab_choice": None
 }
 for k, v in keys.items():
     if k not in st.session_state: 
@@ -129,7 +132,7 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
         full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
         if json_mode: 
             full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
-
+        
         if tools_config:
             try:
                 response = model.generate_content(full_prompt, tools=tools_config)
@@ -147,7 +150,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: 
             return json.loads(match.group(0))
@@ -235,7 +239,7 @@ def get_daily_verse():
         {"ref": "Colossenses 3:23", "txt": "Tudo o que fizerem, façam de todo o coração, como para o Senhor, e não para os homens."},
         {"ref": "Salmos 118:24", "txt": "Este é o dia que o Senhor fez; exultemos e alegremo-nos nele."},
         {"ref": "1 Pedro 5:7", "txt": "Lancem sobre ele toda a sua ansiedade, porque ele tem cuidado de vocês."},
-        {"ref": "Provérbios 4:23", "txt": "Acima de tudo o que deve ser preservado, guarde o seu coração, porque dele procedem as fontes da vida."},
+        {"ref": "Provérbios 4:23", "txt": "Acima de tudo o que deve ser preservado, guarde o seu coração, because dele procedem as fontes da vida."},
         {"ref": "Efésios 6:10", "txt": "Finalmente, fortaleçam-se no Senhor e no seu forte poder."},
         {"ref": "Salmos 139:14", "txt": "Eu te louvo porque me fizeste de modo especial e admirável. Tuas obras são maravilhosas!"}
     ]
@@ -562,6 +566,7 @@ def render_sidebar_widgets():
     </script>
     """
     components.html(html_code, height=600)
+
 # =============================================================================
 # 5. EXECUÇÃO PRINCIPAL E FLUXO DE TELAS (ATUALIZADO)
 # =============================================================================
@@ -629,8 +634,8 @@ if menu == "🎓 Gabaritando a OAB":
     ]
 
     def gerar_questao_oab(materia_selecionada):
-        st.session_state.oab_quiz_data = None
-        st.session_state.oab_show_answer = False
+        st.session_state["oab_quiz_data"] = None
+        st.session_state["oab_show_answer"] = False
         with st.spinner("🔍 Varrendo a web em busca de questões oficiais FGV..."):
             filtro_materia = "" if "Geral" in materia_selecionada else f"especificamente da matéria de {materia_selecionada}"
             
@@ -647,7 +652,7 @@ if menu == "🎓 Gabaritando a OAB":
             else:
                 data = extract_json_surgical(res)
                 if data: 
-                    st.session_state.oab_quiz_data = data
+                    st.session_state["oab_quiz_data"] = data
                 else: 
                     st.error("Erro ao estruturar a questão. Tente buscar novamente.")
 
@@ -659,24 +664,26 @@ if menu == "🎓 Gabaritando a OAB":
         if st.button("🚀 TRAZER QUESTÃO", type="primary", use_container_width=True):
             gerar_questao_oab(mat_escolhida)
             st.rerun()
-    if st.session_state.oab_quiz_data:
-        q = st.session_state.oab_quiz_data
+
+    # CORREÇÃO DA LINHA DE CHECAGEM DO STATE AQUI:
+    if st.session_state.get("oab_quiz_data") is not None:
+        q = st.session_state["oab_quiz_data"]
         st.markdown(f"### 📝 {q.get('exame', 'Exame de Ordem')} | Disciplina: {q.get('materia', mat_escolhida)}")
         st.info(q['enunciado'])
         opts = q['alternativas']
         
-        if not st.session_state.oab_show_answer:
+        if not st.session_state["oab_show_answer"]:
             c1, c2 = st.columns(2)
             if c1.button(f"A) {opts['A']}", use_container_width=True, key="oab_a"): 
-                st.session_state.oab_choice = "A"; st.session_state.oab_show_answer = True; st.rerun()
+                st.session_state["oab_choice"] = "A"; st.session_state["oab_show_answer"] = True; st.rerun()
             if c2.button(f"B) {opts['B']}", use_container_width=True, key="oab_b"): 
-                st.session_state.oab_choice = "B"; st.session_state.oab_show_answer = True; st.rerun()
+                st.session_state["oab_choice"] = "B"; st.session_state["oab_show_answer"] = True; st.rerun()
             if c1.button(f"C) {opts['C']}", use_container_width=True, key="oab_c"): 
-                st.session_state.oab_choice = "C"; st.session_state.oab_show_answer = True; st.rerun()
+                st.session_state["oab_choice"] = "C"; st.session_state["oab_show_answer"] = True; st.rerun()
             if c2.button(f"D) {opts['D']}", use_container_width=True, key="oab_d"): 
-                st.session_state.oab_choice = "D"; st.session_state.oab_show_answer = True; st.rerun()
+                st.session_state["oab_choice"] = "D"; st.session_state["oab_show_answer"] = True; st.rerun()
         else:
-            u, c = st.session_state.oab_choice, q['correta']
+            u, c = st.session_state["oab_choice"], q['correta']
             for l, t in opts.items():
                 icon = "✅" if l == c else ("❌" if l == u else "⬜")
                 st.write(f"{icon} **{l})** {t}")
@@ -706,7 +713,7 @@ elif menu == "✨ Chat Inteligente":
     if verificar_acesso_premium():
         st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
         if not st.session_state.chat_history: 
-            st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado às IAs mais robustas do mercado e indexado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
+            st.markdown("""<div class="onboarding-box"><h4>👋 Olá!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado às IAs mais robustas do mercado e indexado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): 
                 st.markdown(msg["content"])
@@ -915,7 +922,7 @@ elif menu == "🏢 Cartório OCR":
             st.image(image, caption="Imagem Carregada", use_container_width=True)
             if st.button("🔍 Extrair Texto", type="primary"):
                 with st.spinner("Processando OCR com IA Multimodal..."):
-                    res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o texto com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
+                    res = call_gemini("Especialista em OCR cartorial. Transcreva TODO o text com precisão total, mantendo nomes e datas.", "Transcreva.", image=image)
                     if "Limite de velocidade" in res:
                         st.error(res)
                     else:
