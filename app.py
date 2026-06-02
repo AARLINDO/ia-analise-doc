@@ -129,7 +129,7 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
         full_prompt = f"SYSTEM ROLE: {system_prompt}\nUSER REQUEST: {user_prompt}"
         if json_mode: 
             full_prompt += "\nFORMAT: Return ONLY valid JSON. No Markdown."
-        
+
         if tools_config:
             try:
                 response = model.generate_content(full_prompt, tools=tools_config)
