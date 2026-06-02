@@ -562,21 +562,20 @@ def render_sidebar_widgets():
     </script>
     """
     components.html(html_code, height=600)
-
 # =============================================================================
-# 5. EXECUÇÃO PRINCIPAL
+# 5. EXECUÇÃO PRINCIPAL E FLUXO DE TELAS (ATUALIZADO)
 # =============================================================================
 with st.sidebar:
     safe_image_show("carmelio_logo.png.png")
     render_sidebar_widgets()
     st.markdown("---")
     
-    # Sistema Gatekeeper de Proteção por Senha Antiuso Indevido
-    password_input = st.text_input("Chave do Estúdio:", type="password", placeholder="Insira a senha master")
+    # Sistema Gatekeeper (Agora protege apenas os módulos Premium)
+    password_input = st.text_input("Chave do Estúdio (Premium):", type="password", placeholder="Insira a senha master")
     studio_authorized = (password_input == st.secrets.get("STUDIO_PASSWORD", "1234"))
     
     if not studio_authorized:
-        st.warning("🔒 Insira a Chave correta para liberar os módulos de IA.")
+        st.warning("🔒 Insira a Chave para liberar as ferramentas Premium.")
     
     model_obj, status_msg = get_best_model()
     if not model_obj: 
@@ -584,7 +583,9 @@ with st.sidebar:
     else: 
         st.success(f"🟢 **Modelo Ativo: {status_msg}**")
         
+    # Menu reorganizado: OAB agora é a primeira opção (Tela de Entrada)
     menu = st.radio("Menu", [
+        "🎓 Gabaritando a OAB", 
         "✨ Chat Inteligente", 
         "📝 Gere seu Contrato", 
         "🎯 Mestre dos Editais", 
@@ -596,13 +597,114 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# Bloqueio de Interface caso a senha não tenha sido digitada
-if not studio_authorized:
-    st.info("### 🔐 Espaço Protegido\nPor favor, forneça a Chave do Estúdio na barra lateral esquerda para começar a utilizar os recursos de inteligência artificial.")
 
-else:
-    # --- 1. CHAT (COM MODELO INTELIGENTE + GOOGLE HÍBRIDO) ---
-    if menu == "✨ Chat Inteligente":
+# 🛑 FUNÇÃO AUXILIAR DE BLOQUEIO PREMIUM
+def verificar_acesso_premium():
+    if not studio_authorized:
+        st.info("### 🔐 Recursos Avançados Restritos\nEste módulo faz parte do ecossistema premium do Carmélio AI. Para liberá-lo, insira a **Chave do Estúdio** na barra lateral esquerda.")
+        return False
+    return True
+
+
+# =============================================================================
+# 6. RENDERIZAÇÃO DAS TELAS
+# =============================================================================
+
+# 🔓 MÓDULO OAB: 100% ABERTO E GRATUITO PARA QUALQUER VISITANTE
+if menu == "🎓 Gabaritando a OAB":
+    st.title("🎓 Gabaritando a OAB (1ª Fase)")
+    st.markdown("""
+    <div class="onboarding-box">
+        <h4>⚡ Questões Reais da FGV em Tempo Real</h4>
+        <p>Treine com o histórico oficial da OAB sem precisar de uploads. Nossa IA localiza, filtra e fundamenta as questões dinamicamente.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    materias_oab = [
+        "Simulado Geral (Todas as Matérias)",
+        "Ética Profissional", "Direito Constitucional", "Direito Administrativo", 
+        "Direito Penal", "Processo Penal", "Direito Civil", "Processo Civil",
+        "Direito do Trabalho", "Processo do Trabalho", "Direito Tributário", 
+        "Direito Empresarial", "Direitos Humanos", "Direito Internacional"
+    ]
+
+    def gerar_questao_oab(materia_selecionada):
+        st.session_state.oab_quiz_data = None
+        st.session_state.oab_show_answer = False
+        with st.spinner("🔍 Varrendo a web em busca de questões oficiais FGV..."):
+            filtro_materia = "" if "Geral" in materia_selecionada else f"especificamente da matéria de {materia_selecionada}"
+            
+            prompt = f"""
+            ROLE: Professor Especialista em Exame de Ordem da OAB.
+            TASK: Use a busca da internet para encontrar uma QUESTÃO REAL E OFICIAL de exames passados da OAB aplicados pela banca FGV, {filtro_materia}.
+            REQUIREMENT: Forneça o enunciado completo, as 4 alternativas oficiais e o gabarito correto.
+            JSON Output: {{'exame':'Exame OAB número XXX','materia':'...','enunciado':'...','alternativas':{{'A':'...','B':'...','C':'...','D':'...'}},'correta':'A','explicacao':'...'}}
+            """
+            
+            res = call_gemini("JSON Only.", prompt, json_mode=True, use_search=True)
+            if "Limite de velocidade" in res:
+                st.error(res)
+            else:
+                data = extract_json_surgical(res)
+                if data: 
+                    st.session_state.oab_quiz_data = data
+                else: 
+                    st.error("Erro ao estruturar a questão. Tente buscar novamente.")
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        mat_escolhida = st.selectbox("Escolha a disciplina para treinar:", materias_oab)
+    with c2:
+        st.write(""); st.write("")
+        if st.button("🚀 TRAZER QUESTÃO", type="primary", use_container_width=True):
+            gerar_questao_oab(mat_escolhida)
+            st.rerun()
+
+    if st.session_state.oab_quiz_data:
+        q = st.session_state.oab_quiz_data
+        st.markdown(f"### 📝 {q.get('exame', 'Exame de Ordem')} | Disciplina: {q.get('materia', mat_escolhida)}")
+        st.info(q['enunciado'])
+        opts = q['alternativas']
+        
+        if not st.session_state.oab_show_answer:
+            c1, c2 = st.columns(2)
+            if c1.button(f"A) {opts['A']}", use_container_width=True, key="oab_a"): 
+                st.session_state.oab_choice = "A"; st.session_state.oab_show_answer = True; st.rerun()
+            if c2.button(f"B) {opts['B']}", use_container_width=True, key="oab_b"): 
+                st.session_state.oab_choice = "B"; st.session_state.oab_show_answer = True; st.rerun()
+            if c1.button(f"C) {opts['C']}", use_container_width=True, key="oab_c"): 
+                st.session_state.oab_choice = "C"; st.session_state.oab_show_answer = True; st.rerun()
+            if c2.button(f"D) {opts['D']}", use_container_width=True, key="oab_d"): 
+                st.session_state.oab_choice = "D"; st.session_state.oab_show_answer = True; st.rerun()
+        else:
+            u, c = st.session_state.oab_choice, q['correta']
+            for l, t in opts.items():
+                icon = "✅" if l == c else ("❌" if l == u else "⬜")
+                st.write(f"{icon} **{l})** {t}")
+            
+            if u == c: 
+                st.success("🎯 Sensacional! Você acertou uma questão oficial da OAB!")
+                add_xp(60)
+            else: 
+                st.error(f"Faltou pouco! A alternativa correta era a letra: {c}")
+            
+            st.markdown(f"**📚 Justificativa e Fundamentação Legal:**")
+            st.write(q['explicacao'])
+            
+            q_text = f"EXAME: {q.get('exame','OAB FGV')}\nMATÉRIA: {q.get('materia', mat_escolhida)}\n\nQUESTÃO:\n{q['enunciado']}\n\nA) {opts['A']}\nB) {opts['B']}\nC) {opts['C']}\nD) {opts['D']}\n\nRESPOSTA: {q['correta']}\n\nJUSTIFICATIVA:\n{q['explicacao']}"
+            docx_q = create_generic_docx(q_text, "Questão Oficial OAB - Carmélio AI")
+            if docx_q:
+                st.download_button("💾 Baixar Questão (Word)", docx_q, "Questao_OAB_Carmelio.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            
+            st.write("")
+            if st.button("➡️ Próxima Questão", type="primary"):
+                gerar_questao_oab(mat_escolhida)
+                st.rerun()
+
+
+# 🔒 MÓDULOS DE ACESSO RESTRITO (EXIGEM A SENHA MASTER)
+elif menu == "✨ Chat Inteligente":
+    if verificar_acesso_premium():
         st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
         if not st.session_state.chat_history: 
             st.markdown("""<div class="onboarding-box"><h4>👋 Olá, Arthur!</h4><p>Sou seu <b>Mentor Jurídico</b>. Dúvidas, peças ou jurisprudência? Estou conectado às IAs mais robustas do mercado e indexado ao Google para fatos recentes.</p></div>""", unsafe_allow_html=True)
@@ -621,8 +723,8 @@ else:
                     st.session_state.chat_history.append({"role": "assistant", "content": res})
                     add_xp(5)
 
-    # --- 2. CONTRATOS ---
-    elif menu == "📝 Gere seu Contrato":
+elif menu == "📝 Gere seu Contrato":
+    if verificar_acesso_premium():
         st.title("📝 Gere seu Contrato")
         step = st.session_state.contract_step
         
@@ -687,8 +789,8 @@ else:
                 st.session_state.contract_step=2
                 st.rerun()
 
-    # --- 3. MESTRE DOS EDITAIS ---
-    elif menu == "🎯 Mestre dos Editais":
+elif menu == "🎯 Mestre dos Editais":
+    if verificar_acesso_premium():
         st.title("🎯 Mestre dos Editais")
         
         if not st.session_state.edital_text:
@@ -797,8 +899,8 @@ else:
                         gerar_turbo(diff, foco)
                         st.rerun()
 
-    # --- 4. MÓDULO OCR ---
-    elif menu == "🏢 Cartório OCR":
+elif menu == "🏢 Cartório OCR":
+    if verificar_acesso_premium():
         st.title("🏢 Cartório OCR (Digitalizador)")
         st.markdown("""
         <div class="onboarding-box">
@@ -827,8 +929,8 @@ else:
             if docx_ocr:
                 st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
-    # --- 5. MÓDULO TRANSCRIÇÃO REAL ---
-    elif menu == "🎙️ Transcrição":
+elif menu == "🎙️ Transcrição":
+    if verificar_acesso_premium():
         st.title("🎙️ Transcrição de Áudio Real")
         st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto Inteligente</h4><p>Envie o arquivo e a inteligência artificial fará a transcrição completa e a estruturação lógica do conteúdo.</p></div>""", unsafe_allow_html=True)
         
