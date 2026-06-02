@@ -54,7 +54,7 @@ keys = {
     "oab_choice": None,
     "oab_click_count": 0,
     "caderno_erros": [],
-    # --- NOVAS CHAVES DE RETENÇÃO ---
+    # --- CHAVES DE RETENÇÃO ---
     "oab_stats": {"total": 0, "acertos": 0, "erros": 0, "materias": {}},
     "historico_oab": [],
     "favoritas": [],
@@ -132,7 +132,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 
 def extract_json_surgical(text):
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: return json.loads(match.group(0))
     except: pass
@@ -238,40 +239,168 @@ def render_sidebar_widgets():
         .verse-text {{ font-style: italic; font-size: 12px; color: #E2E8F0; margin-bottom: 5px; }}
         .verse-ref {{ font-size: 10px; font-weight: bold; color: #F59E0B; text-align: right; }}
         .time-display {{ font-size: 34px; font-weight: 800; margin: 6px 0; color: #4285F4; }}
+        .config-label {{ font-size: 10px; color: #8B949E; font-weight: bold; margin-top: 6px; margin-bottom: 3px; text-align: left; padding-left: 4px; }}
+        .selector-group {{ display: flex; justify-content: space-between; background: #11141d; padding: 2px; border-radius: 6px; margin-bottom: 8px; }}
+        .selector-btn {{ flex: 1; background: transparent; border: none; color: #8B949E; padding: 4px 0; font-size: 11px; font-weight: 600; cursor: pointer; border-radius: 4px; transition: all 0.2s; }}
+        .selector-btn.active {{ background: #2563EB; color: white; }}
+        .btn {{ border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin: 2px; font-size: 12px; font-weight: bold; color: white; }}
+        .btn-primary {{ background: #2563EB; }}
+        .btn-warn {{ background: #D97706; }}
+        .btn-danger {{ background: #DC2626; }}
         audio {{ width: 100%; margin-top: 10px; }}
     </style>
+    
     <div class="devotional-box">
         <div style="color:#F59E0B;font-size:11px;font-weight:bold;margin-bottom:4px;">📖 Palavra do Dia</div>
         <div class="verse-text">"{v['txt']}"</div>
         <div class="verse-ref">{v['ref']}</div>
     </div>
+    
     <div class="widget-box">
         <div style="font-size:11px;font-weight:bold;color:#8B949E;margin-bottom:2px;">TOMATO FOCUS</div>
+        
+        <div class="config-label">TEMPO DE FOCO</div>
+        <div class="selector-group">
+            <button class="selector-btn" id="foco-25" onclick="setConfigFoco(25)">25m</button>
+            <button class="selector-btn" id="foco-35" onclick="setConfigFoco(35)">35m</button>
+            <button class="selector-btn" id="foco-45" onclick="setConfigFoco(45)">45m</button>
+        </div>
+
+        <div class="config-label">INTERVALO</div>
+        <div class="selector-group">
+            <button class="selector-btn" id="break-5" onclick="setConfigBreak(5)">5m</button>
+            <button class="selector-btn" id="break-10" onclick="setConfigBreak(10)">10m</button>
+            <button class="selector-btn" id="break-15" onclick="setConfigBreak(15)">15m</button>
+        </div>
+
         <div class="time-display" id="timer">25:00</div>
         <div id="status" style="font-size:10px;color:#aaa;margin-bottom:8px;">Pronto</div>
+        
+        <div>
+            <button class="btn btn-primary" onclick="startTimer()">▶</button>
+            <button class="btn btn-warn" onclick="pauseTimer()">⏸</button>
+            <button class="btn btn-danger" onclick="resetTimer()">↺</button>
+        </div>
     </div>
+    
     <div class="widget-box">
         <div style="font-size:11px;font-weight:bold;color:#8B949E;margin-bottom:10px;">🎵 Rádio LoFi 24h</div>
         <audio controls><source src="https://stream.zeno.fm/f3wvbbqmdg8uv" type="audio/mpeg"></audio>
+        <div style="font-size:10px;color:#34D399;margin-top:8px;">Clique em Play para ouvir</div>
     </div>
+
+    <script>
+        let interval = null;
+        let cfgFoco = localStorage.getItem('pomodoro_cfg_foco') ? parseInt(localStorage.getItem('pomodoro_cfg_foco')) : 25;
+        let cfgBreak = localStorage.getItem('pomodoro_cfg_break') ? parseInt(localStorage.getItem('pomodoro_cfg_break')) : 5;
+        let time = localStorage.getItem('pomodoro_time') ? parseInt(localStorage.getItem('pomodoro_time')) : (cfgFoco * 60);
+        let isModeFoco = localStorage.getItem('pomodoro_mode') === 'false' ? false : true;
+        let isRunning = localStorage.getItem('pomodoro_running') === 'true' ? true : false;
+
+        function setConfigFoco(mins) {{
+            if(isRunning) return;
+            cfgFoco = mins;
+            localStorage.setItem('pomodoro_cfg_foco', mins);
+            if(isModeFoco) {{
+                time = mins * 60;
+                localStorage.setItem('pomodoro_time', time);
+            }}
+            updateUI();
+        }}
+
+        function setConfigBreak(mins) {{
+            if(isRunning) return;
+            cfgBreak = mins;
+            localStorage.setItem('pomodoro_cfg_break', mins);
+            if(!isModeFoco) {{
+                time = mins * 60;
+                localStorage.setItem('pomodoro_time', time);
+            }}
+            updateUI();
+        }}
+
+        function updateUI() {{
+            let m = Math.floor(time / 60);
+            let s = time % 60;
+            document.getElementById('timer').innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+            document.getElementById('timer').style.color = isModeFoco ? '#4285F4' : '#34D399';
+            document.getElementById('status').innerText = isRunning ? (isModeFoco ? 'Focando...' : 'Descansando...') : 'Pausado';
+
+            ['25','35','45'].forEach(v => {{ document.getElementById('foco-'+v).classList.remove('active'); }});
+            document.getElementById('foco-'+cfgFoco).classList.add('active');
+
+            ['5','10','15'].forEach(v => {{ document.getElementById('break-'+v).classList.remove('active'); }});
+            document.getElementById('break-'+cfgBreak).classList.add('active');
+        }}
+
+        function startTimer() {{
+            if(interval) return;
+            isRunning = true;
+            localStorage.setItem('pomodoro_running', 'true');
+            interval = setInterval(() => {{
+                if(time > 0) {{
+                    time--;
+                    localStorage.setItem('pomodoro_time', time);
+                    updateUI();
+                }} else {{
+                    clearInterval(interval);
+                    interval = null;
+                    if(isModeFoco) {{
+                        isModeFoco = false;
+                        time = cfgBreak * 60;
+                        localStorage.setItem('pomodoro_mode', 'false');
+                        alert('Ciclo de Foco Concluído! Hora do intervalo.');
+                    }} else {{
+                        isModeFoco = true;
+                        time = cfgFoco * 60;
+                        localStorage.setItem('pomodoro_mode', 'true');
+                        alert('Fim do descanso! Iniciando foco.');
+                    }}
+                    localStorage.setItem('pomodoro_time', time);
+                    updateUI();
+                    startTimer();
+                }}
+            }}, 1000);
+        }}
+
+        function pauseTimer() {{
+            clearInterval(interval);
+            interval = null;
+            isRunning = false;
+            localStorage.setItem('pomodoro_running', 'false');
+            updateUI();
+        }}
+
+        function resetTimer() {{
+            pauseTimer();
+            isModeFoco = true;
+            time = cfgFoco * 60;
+            localStorage.setItem('pomodoro_time', time);
+            localStorage.setItem('pomodoro_mode', 'true');
+            localStorage.setItem('pomodoro_running', 'false');
+            updateUI();
+            document.getElementById('status').innerText = 'Pronto';
+        }}
+
+        updateUI();
+        if (isRunning) {{ startTimer(); }}
+    </script>
     """
-    components.html(html_code, height=420)
+    components.html(html_code, height=620)
 
 # =============================================================================
 # 5. EXECUÇÃO PRINCIPAL E FLUXO DE TELAS
 # =============================================================================
 with st.sidebar:
     safe_image_show("carmelio_logo.png.png")
-    
-    # Exibição de Patente Baseada em Gamificação
     st.caption(f"⚡ Nível Atual: **{get_rank_badge(st.session_state.user_xp)}**")
     
     render_sidebar_widgets()
     st.markdown("---")
     
-    # ACESSO DIRETO ATIVADO: Senha removida para máxima atração e viralização
+    # ACESSO DIRETO E LIVRE ATIVADO SEM BARREIRAS DE SENHA
     studio_authorized = True
-    st.success("🔓 Acesso Livre Ativado!")
+    st.success("Acesso Livre Ativado! 🔓")
     
     model_obj, status_msg = get_best_model()
     if not model_obj: st.error(f"❌ {status_msg}")
@@ -287,7 +416,6 @@ with st.sidebar:
     st.progress(min((st.session_state.user_xp % 100) / 100, 1.0))
     st.markdown("""<div class='footer-credits'>Desenvolvido por<br><strong>Arthur Carmélio</strong><br>© 2026 Carmélio AI</div>""", unsafe_allow_html=True)
 
-# Mantido por compatibilidade interna do app
 def verificar_acesso_premium():
     return True
 
@@ -298,7 +426,6 @@ def verificar_acesso_premium():
 if menu == "🎓 Gabaritando a OAB":
     st.title("🎓 Ecossistema de Aprovação OAB 47")
     
-    # Abas Estratégicas para o Aluno se Manter Conectado
     t1, t2, t3, t4, t5 = st.tabs([
         "🎯 1ª Fase - Simulador FGV", "📊 Meu Desempenho & Coach", 
         "✍️ 2ª Fase - Corretora", "📚 Caderno de Erros", "⭐ Favoritas"
@@ -353,7 +480,6 @@ if menu == "🎓 Gabaritando a OAB":
             st.info(q['enunciado'])
             opts = q['alternativas']
             
-            # Botão de Favoritar a questão
             if st.button("⭐ Salvar nas Favoritas", key="fav_btn"):
                 if q not in st.session_state.favoritas:
                     st.session_state.favoritas.append(q)
@@ -369,7 +495,6 @@ if menu == "🎓 Gabaritando a OAB":
                 u, c = st.session_state["oab_choice"], q['correta']
                 is_correct = (u == c)
                 
-                # Gravação dos dados no Radar de Desempenho e Histórico
                 if "oab_processed" not in st.session_state:
                     st.session_state.oab_stats["total"] += 1
                     if is_correct:
@@ -396,7 +521,6 @@ if menu == "🎓 Gabaritando a OAB":
                 else:
                     st.error(f"Faltou pouco! Resposta correta: Letra {c}")
 
-                # Correção Avançada Estruturada
                 with st.container(border=True):
                     st.markdown("#### 📚 Correção Avançada da IA")
                     st.write(q.get('fundamentacao', 'Sem fundamentação disponível.'))
@@ -412,7 +536,6 @@ if menu == "🎓 Gabaritando a OAB":
 
     with t2:
         st.subheader("📊 Radar de Performance OAB")
-        st.write("Métricas de monitoramento tático em tempo real.")
         
         st_t = st.session_state.oab_stats["total"]
         st_a = st.session_state.oab_stats["acertos"]
@@ -427,7 +550,6 @@ if menu == "🎓 Gabaritando a OAB":
             taxa_calculada = round((st_a / st_t) * 100, 1)
             st.metric("Taxa de Acertos Geral", f"{taxa_calculada}%")
             
-            # Diagnóstico de Probabilidade de Aprovação
             st.markdown("### 📈 Diagnóstico Real de Aprovação")
             if st_t < 10:
                 st.info("ℹ️ Responda pelo menos 10 questões para o sistema calcular sua probabilidade de aprovação.")
@@ -435,11 +557,10 @@ if menu == "🎓 Gabaritando a OAB":
                 if taxa_calculada >= 75:
                     st.success(f"🔥 **Excelente chance de aprovação ({taxa_calculada}%):** Sua base de dados conceitual está sólida. Continue firme nos simulados!")
                 elif taxa_calculada >= 55:
-                    st.warning(f"⚠️ **Zona de Atenção ({taxa_calculada}%):** Você está muito perto, mas oscilando. Force revisões cirúrgicas no seu caderno de erros.")
+                    st.warning(f"⚠️ **Zona de Atenção ({taxa_calculada}%):** Você está muito perto, mas oscilando. Force revisões no seu caderno de erros.")
                 else:
-                    st.error(f"🚨 **Alerta de Risco ({taxa_calculada}%):** Risco alto de reprovação se a prova fosse hoje. Intensifique o uso do Coach IA logo abaixo.")
+                    st.error(f"🚨 **Alerta de Risco ({taxa_calculada}%):** Risco alto de reprovação se a prova fosse hoje. Intensifique os estudos.")
 
-            # Compartilhamento de Desempenho (Pillow)
             st.markdown("---")
             st.markdown("#### 📸 Compartilhe suas conquistas no Instagram!")
             card_btn = generate_performance_card(st_a, st_t, taxa_calculada)
@@ -448,11 +569,8 @@ if menu == "🎓 Gabaritando a OAB":
         else:
             st.info("Comece a treinar na aba ao lado para gerar seu radar estatístico.")
 
-        # Módulo Integrado de Coach de Estudos
         st.markdown("---")
         st.subheader("🎯 Coach IA: Cronograma Tático Automatizado")
-        st.write("A inteligência artificial organiza suas horas baseada estritamente no peso estatístico da banca.")
-        
         cc1, cc2 = st.columns(2)
         dias_r = cc1.number_input("Dias até a prova da OAB:", min_value=1, max_value=365, value=45)
         horas_d = cc2.slider("Horas por dia que você pretende dedicar:", 1, 12, 3)
@@ -465,7 +583,6 @@ if menu == "🎓 Gabaritando a OAB":
         if st.session_state.coach_cronograma:
             st.markdown(st.session_state.coach_cronograma)
 
-        # Histórico Recente (Atrativo Psicológico de Retenção)
         st.markdown("---")
         st.subheader("📋 Histórico de Treinos (Últimas 20)")
         if st.session_state.historico_oab:
@@ -489,7 +606,7 @@ if menu == "🎓 Gabaritando a OAB":
     with t4:
         st.subheader("📚 Caderno de Erros Inteligente")
         if not st.session_state.caderno_erros:
-            st.info("Seu caderno está limpo! Erros cometidos no simulador da 1ª fase salvam automaticamente aqui para revisão posterior.")
+            st.info("Seu caderno está limpo! Erros cometidos no simulador serão salvos aqui automaticamente.")
         else:
             for i, err in enumerate(st.session_state.caderno_erros):
                 with st.expander(f"❌ Questão {i+1} - Matéria: {err.get('materia')}"):
@@ -509,13 +626,13 @@ if menu == "🎓 Gabaritando a OAB":
                     st.write(fav.get('fundamentacao'))
 
 # =============================================================================
-# MÓDULOS DE ECOSSISTEMA JURÍDICO (100% LIBERADOS - ACESSO DIRETO)
+# OUTROS MÓDULOS JURÍDICOS (ACESSO DIRETO)
 # =============================================================================
 
 elif menu == "✨ Chat Inteligente":
     st.markdown('<h1 class="gemini-text">Mentor Jurídico</h1>', unsafe_allow_html=True)
     if not st.session_state.chat_history: 
-        st.markdown("""<div class="onboarding-box"><h4>👋 Bem-vindo ao Modo Direto</h4><p>Sou seu <b>Mentor Jurídico</b> de acesso livre. Dúvidas, consultas, petições ou jurisprudências? Estou pronto.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="onboarding-box"><h4>👋 Bem-vindo ao Modo Direto</h4><p>Sou seu <b>Mentor Jurídico</b> de acesso livre. Dúvidas, consultas, petições ou jurisprudências?</p></div>""", unsafe_allow_html=True)
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"], avatar="🧑‍⚖️" if msg["role"] == "user" else "🤖"): st.markdown(msg["content"])
     if p := st.chat_input("Digite sua dúvida legal aqui..."):
