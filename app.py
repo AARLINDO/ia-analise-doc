@@ -41,7 +41,7 @@ except ImportError:
 try: 
     from PIL import Image
 except ImportError: 
-    image = None
+    Image = None
 
 # Inicialização de Estado (Session State)
 keys = {
@@ -147,7 +147,8 @@ def call_gemini(system_prompt, user_prompt, json_mode=False, image=None, audio_b
 def extract_json_surgical(text):
     """Extrai JSON de texto bagunçado."""
     try:
-        text = text.replace("```json", "").replace("```", "")
+        text = text.replace("```json", "").replace("
+```", "")
         match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
         if match: 
             return json.loads(match.group(0))
@@ -320,20 +321,58 @@ def render_sidebar_widgets():
         }}
 
         .time-display {{
-            font-size: 32px;
+            font-size: 34px;
             font-weight: 800;
-            margin: 8px 0;
+            margin: 6px 0;
             color: #4285F4;
             transition: color 0.3s ease;
         }}
 
+        .config-label {{
+            font-size: 10px;
+            color: #8B949E;
+            font-weight: bold;
+            margin-top: 6px;
+            margin-bottom: 3px;
+            text-align: left;
+            padding-left: 4px;
+        }}
+
+        .selector-group {{
+            display: flex;
+            justify-content: space-between;
+            background: #11141d;
+            padding: 2px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }}
+
+        .selector-btn {{
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #8B949E;
+            padding: 4px 0;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }}
+
+        .selector-btn.active {{
+            background: #2563EB;
+            color: white;
+        }}
+
         .btn {{
             border: none;
-            padding: 5px 10px;
+            padding: 6px 12px;
             border-radius: 6px;
             cursor: pointer;
             margin: 2px;
-            font-size: 11px;
+            font-size: 12px;
+            font-weight: bold;
             color: white;
         }}
 
@@ -349,7 +388,7 @@ def render_sidebar_widgets():
 
     <div class="devotional-box">
         <div style="color:#F59E0B;font-size:11px;font-weight:bold;margin-bottom:4px;">
-            📖 Palavra do Dia
+            <table>📖 Palavra do Dia</table>
         </div>
         <div class="verse-text">
             "{v['txt']}"
@@ -360,8 +399,23 @@ def render_sidebar_widgets():
     </div>
 
     <div class="widget-box">
-        <div style="font-size:11px;font-weight:bold;color:#8B949E;margin-bottom:5px;">
+        <div style="font-size:11px;font-weight:bold;color:#8B949E;margin-bottom:2px;">
             TOMATO FOCUS
+        </div>
+
+        <!-- Seletores de Configuração de Tempo -->
+        <div class="config-label">TEMPO DE FOCO</div>
+        <div class="selector-group">
+            <button class="selector-btn" id="foco-25" onclick="setConfigFoco(25)">25m</button>
+            <button class="selector-btn" id="foco-35" onclick="setConfigFoco(35)">35m</button>
+            <button class="selector-btn" id="foco-45" onclick="setConfigFoco(45)">45m</button>
+        </div>
+
+        <div class="config-label">INTERVALO</div>
+        <div class="selector-group">
+            <button class="selector-btn" id="break-5" onclick="setConfigBreak(5)">5m</button>
+            <button class="selector-btn" id="break-10" onclick="setConfigBreak(10)">10m</button>
+            <button class="selector-btn" id="break-15" onclick="setConfigBreak(15)">15m</button>
         </div>
 
         <div class="time-display" id="timer">25:00</div>
@@ -393,27 +447,58 @@ def render_sidebar_widgets():
     </div>
 
     <script>
-        const FOCO_TIME = 25 * 60;
-        const INTERVALO_TIME = 5 * 60;
-        
         let interval = null;
 
-        // Recupera valores antigos salvos no LocalStorage caso a página recarregue
-        let time = localStorage.getItem('pomodoro_time') ? parseInt(localStorage.getItem('pomodoro_time')) : FOCO_TIME;
+        // Carrega configurações personalizadas ou adota os padrões iniciais (25/5)
+        let cfgFoco = localStorage.getItem('pomodoro_cfg_foco') ? parseInt(localStorage.getItem('pomodoro_cfg_foco')) : 25;
+        let cfgBreak = localStorage.getItem('pomodoro_cfg_break') ? parseInt(localStorage.getItem('pomodoro_cfg_break')) : 5;
+
+        let time = localStorage.getItem('pomodoro_time') ? parseInt(localStorage.getItem('pomodoro_time')) : (cfgFoco * 60);
         let isModeFoco = localStorage.getItem('pomodoro_mode') === 'false' ? false : true;
         let isRunning = localStorage.getItem('pomodoro_running') === 'true' ? true : false;
 
-        function updateDisplay() {{
+        function setConfigFoco(mins) {{
+            if(isRunning) return; // Trava alteração com o timer rodando
+            cfgFoco = mins;
+            localStorage.setItem('pomodoro_cfg_foco', mins);
+            if(isModeFoco) {{
+                time = mins * 60;
+                localStorage.setItem('pomodoro_time', time);
+            }}
+            updateUI();
+        }}
+
+        function setConfigBreak(mins) {{
+            if(isRunning) return;
+            cfgBreak = mins;
+            localStorage.setItem('pomodoro_cfg_break', mins);
+            if(!isModeFoco) {{
+                time = mins * 60;
+                localStorage.setItem('pomodoro_time', time);
+            }}
+            updateUI();
+        }}
+
+        function updateUI() {{
+            // Atualiza o relógio
             let m = Math.floor(time / 60);
             let s = time % 60;
+            document.getElementById('timer').innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
 
-            document.getElementById('timer').innerText =
-            (m < 10 ? '0' : '') + m + ':' +
-            (s < 10 ? '0' : '') + s;
-
-            // Mantém a cor certa baseada no modo após a re-renderização do Streamlit
+            // Altera cores de acordo com o estado ativo
             document.getElementById('timer').style.color = isModeFoco ? '#4285F4' : '#34D399';
             document.getElementById('status').innerText = isRunning ? (isModeFoco ? 'Focando...' : 'Descansando...') : 'Pausado';
+
+            // Altera as classes ativas dos botões de configuração
+            ['25','35','45'].forEach(v => {{
+                document.getElementById('foco-'+v).classList.remove('active');
+            }});
+            document.getElementById('foco-'+cfgFoco).classList.add('active');
+
+            ['5','10','15'].forEach(v => {{
+                document.getElementById('break-'+v).classList.remove('active');
+            }});
+            document.getElementById('break-'+cfgBreak).classList.add('active');
         }}
 
         function startTimer() {{
@@ -421,13 +506,12 @@ def render_sidebar_widgets():
             
             isRunning = true;
             localStorage.setItem('pomodoro_running', 'true');
-            document.getElementById('status').innerText = isModeFoco ? 'Focando...' : 'Descansando...';
 
             interval = setInterval(() => {{
                 if(time > 0) {{
                     time--;
                     localStorage.setItem('pomodoro_time', time);
-                    updateDisplay();
+                    updateUI();
                 }}
                 else {{
                     clearInterval(interval);
@@ -435,18 +519,18 @@ def render_sidebar_widgets():
                     
                     if(isModeFoco) {{
                         isModeFoco = false;
-                        time = INTERVALO_TIME;
+                        time = cfgBreak * 60;
                         localStorage.setItem('pomodoro_mode', 'false');
-                        alert('Bora levantar da cadeira! Hora do Intervalo.');
+                        alert('Ciclo de Foco Concluído! Hora do seu intervalo de ' + cfgBreak + ' minutos.');
                     }} else {{
                         isModeFoco = true;
-                        time = FOCO_TIME;
+                        time = cfgFoco * 60;
                         localStorage.setItem('pomodoro_mode', 'true');
-                        alert('Intervalo acabou! Foco total agora.');
+                        alert('Fim do descanso! Iniciando bloco de foco de ' + cfgFoco + ' minutos.');
                     }}
                     
                     localStorage.setItem('pomodoro_time', time);
-                    updateDisplay();
+                    updateUI();
                     startTimer();
                 }}
             }}, 1000);
@@ -457,28 +541,28 @@ def render_sidebar_widgets():
             interval = null;
             isRunning = false;
             localStorage.setItem('pomodoro_running', 'false');
-            document.getElementById('status').innerText = 'Pausado';
+            updateUI();
         }}
 
         function resetTimer() {{
             pauseTimer();
             isModeFoco = true;
-            time = FOCO_TIME;
-            localStorage.setItem('pomodoro_time', FOCO_TIME);
+            time = cfgFoco * 60;
+            localStorage.setItem('pomodoro_time', time);
             localStorage.setItem('pomodoro_mode', 'true');
             localStorage.setItem('pomodoro_running', 'false');
-            updateDisplay();
+            updateUI();
             document.getElementById('status').innerText = 'Pronto';
         }}
 
-        // Inicializa o display na carga e continua rodando automaticamente se já estava ativo
-        updateDisplay();
+        // Execução inicial
+        updateUI();
         if (isRunning) {{
             startTimer();
         }}
     </script>
     """
-    components.html(html_code, height=520)
+    components.html(html_code, height=600)
 
 # =============================================================================
 # 5. EXECUÇÃO PRINCIPAL
