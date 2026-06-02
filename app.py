@@ -219,13 +219,13 @@ def get_daily_verse():
         {"ref": "Isaías 40:31", "txt": "Mas aqueles que esperam no Senhor renovam as suas forças. Voam bem alto como águias; correm e não ficam exaustos."},
         {"ref": "Mateus 6:33", "txt": "Busquem, pois, em primeiro lugar o Reino de Deus e a sua justiça, e todas essas coisas serão acrescentadas a vocês."},
         {"ref": "Salmos 46:1", "txt": "Deus é o nosso refúgio e a nossa fortaleza, auxílio sempre presente na adversidade."},
-        {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age em todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
+        {"ref": "Romanos 8:28", "txt": "Sabemos que Deus age in todas as coisas para o bem daqueles que o amam, dos que foram chamados de acordo com o seu propósito."},
         {"ref": "Provérbios 3:5", "txt": "Confie no Senhor de todo o seu coração e não se apóie em seu próprio entendimento."},
         {"ref": "Salmos 119:105", "txt": "A tua palavra é lâmpada que ilumina os meus passos e luz que clareia o meu caminho."},
         {"ref": "João 16:33", "txt": "No mundo vocês terão aflições; contudo, tenham ânimo! Eu venci o mundo."},
         {"ref": "Gálatas 6:9", "txt": "E não nos cansemos de fazer o bem, pois no tempo próprio colheremos, se não desanimarmos."},
         {"ref": "Salmos 27:1", "txt": "O Senhor é a minha luz e a minha salvação; de quem terei medo? O Senhor é a fortaleza da minha vida."},
-        {"ref": "Tiago 1:5", "txt": "Se algum di vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade."},
+        {"ref": "Tiago 1:5", "txt": "Se algum de vocês tem falta de sabedoria, peça-a a Deus, que a todos dá livremente, de boa vontade."},
         {"ref": "Romanos 12:12", "txt": "Alegrem-se na esperança, sejam pacientes na tribulação, perseverem na oração."},
         {"ref": "1 Coríntios 16:14", "txt": "Façam tudo com amor."},
         {"ref": "Salmos 34:17", "txt": "Os justos clamam, o Senhor os ouve e os livra de todas as suas tribulações."},
@@ -237,7 +237,7 @@ def get_daily_verse():
         {"ref": "1 Pedro 5:7", "txt": "Lancem sobre ele toda a sua ansiedade, porque ele tem cuidado de vocês."},
         {"ref": "Provérbios 4:23", "txt": "Acima de tudo o que deve ser preservado, guarde o seu coração, porque dele procedem as fontes da vida."},
         {"ref": "Efésios 6:10", "txt": "Finalmente, fortaleçam-se no Senhor e no seu forte poder."},
-        {"ref": "Salmos 139:14", "txt": "Eu te louvo porque me fizeste de modo especial e admirable. Tuas obras são maravilhosas!"}
+        {"ref": "Salmos 139:14", "txt": "Eu te louvo porque me fizeste de modo especial e admirável. Tuas obras são maravilhosas!"}
     ]
     dia_do_ano = date.today().timetuple().tm_yday
     index = dia_do_ano % len(versiculos)
@@ -324,6 +324,7 @@ def render_sidebar_widgets():
             font-weight: 800;
             margin: 8px 0;
             color: #4285F4;
+            transition: color 0.3s ease;
         }}
 
         .btn {{
@@ -336,17 +337,9 @@ def render_sidebar_widgets():
             color: white;
         }}
 
-        .btn-primary {{
-            background: #2563EB;
-        }}
-
-        .btn-warn {{
-            background: #D97706;
-        }}
-
-        .btn-danger {{
-            background: #DC2626;
-        }}
+        .btn-primary {{ background: #2563EB; }}
+        .btn-warn {{ background: #D97706; }}
+        .btn-danger {{ background: #DC2626; }}
 
         audio {{
             width: 100%;
@@ -400,9 +393,12 @@ def render_sidebar_widgets():
     </div>
 
     <script>
-        let time = 25 * 60;
-        let initialTime = 25 * 60;
+        const FOCO_TIME = 25 * 60;
+        const INTERVALO_TIME = 5 * 60;
+        
+        let time = FOCO_TIME;
         let interval = null;
+        let isModeFoco = true;
 
         function updateDisplay() {{
             let m = Math.floor(time / 60);
@@ -416,7 +412,7 @@ def render_sidebar_widgets():
         function startTimer() {{
             if(interval) return;
 
-            document.getElementById('status').innerText = 'Focando...';
+            document.getElementById('status').innerText = isModeFoco ? 'Focando...' : 'Descansando...';
 
             interval = setInterval(() => {{
                 if(time > 0) {{
@@ -426,9 +422,23 @@ def render_sidebar_widgets():
                 else {{
                     clearInterval(interval);
                     interval = null;
-
-                    document.getElementById('timer').innerText = '00:00';
-                    document.getElementById('status').innerText = 'Tempo encerrado!';
+                    
+                    if(isModeFoco) {{
+                        isModeFoco = false;
+                        time = INTERVALO_TIME;
+                        document.getElementById('timer').style.color = '#34D399';
+                        document.getElementById('status').innerText = 'Hora do intervalo!';
+                        alert('Bora levantar da cadeira! Hora do Intervalo.');
+                    }} else {{
+                        isModeFoco = true;
+                        time = FOCO_TIME;
+                        document.getElementById('timer').style.color = '#4285F4';
+                        document.getElementById('status').innerText = 'Volta ao trabalho!';
+                        alert('Intervalo acabou! Foco total agora.');
+                    }}
+                    
+                    updateDisplay();
+                    startTimer();
                 }}
             }}, 1000);
         }}
@@ -441,7 +451,9 @@ def render_sidebar_widgets():
 
         function resetTimer() {{
             pauseTimer();
-            time = initialTime;
+            isModeFoco = true;
+            time = FOCO_TIME;
+            document.getElementById('timer').style.color = '#4285F4';
             updateDisplay();
             document.getElementById('status').innerText = 'Pronto';
         }}
@@ -453,7 +465,6 @@ def render_sidebar_widgets():
 # 5. EXECUÇÃO PRINCIPAL
 # =============================================================================
 with st.sidebar:
-    # ATUALIZADO: Usando o nome exato da nova imagem salva
     safe_image_show("carmelio_logo.png.png")
     render_sidebar_widgets()
     st.markdown("---")
@@ -714,7 +725,7 @@ else:
             if docx_ocr:
                 st.download_button("💾 Baixar Texto em Word", docx_ocr, "Certidao_Inteiro_Teor.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
 
-    # --- 5. MÓDULO TRANSCRIÇÃO REAL (ATUALIZADO!) ---
+    # --- 5. MÓDULO TRANSCRIÇÃO REAL ---
     elif menu == "🎙️ Transcrição":
         st.title("🎙️ Transcrição de Áudio Real")
         st.markdown("""<div class="onboarding-box"><h4>🗣️ Voz para Texto Inteligente</h4><p>Envie o arquivo e a inteligência artificial fará a transcrição completa e a estruturação lógica do conteúdo.</p></div>""", unsafe_allow_html=True)
