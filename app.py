@@ -659,7 +659,6 @@ if menu == "🎓 Gabaritando a OAB":
         if st.button("🚀 TRAZER QUESTÃO", type="primary", use_container_width=True):
             gerar_questao_oab(mat_escolhida)
             st.rerun()
-
     if st.session_state.oab_quiz_data:
         q = st.session_state.oab_quiz_data
         st.markdown(f"### 📝 {q.get('exame', 'Exame de Ordem')} | Disciplina: {q.get('materia', mat_escolhida)}")
